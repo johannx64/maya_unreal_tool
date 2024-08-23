@@ -1,5 +1,25 @@
 import maya.cmds as cmds
 import os
+import sys
+
+# Correctly add the path
+sys.path.append(r'C:\Users\Acer\Documents\maya_unreal\src\maya')
+
+# Print sys.path to ensure the path is correctly added
+print("sys.path:", sys.path)
+
+# Try importing the module
+try:
+    import functions
+    import importlib
+    importlib.reload(functions)  # Reload if you've made changes
+    from functions import ImportTools
+    print("ImportTools successfully imported.")
+except ImportError as e:
+    print(f"ImportError: {e}")
+except Exception as e:
+    print(f"An error occurred: {e}")
+
 
 # Constants
 WINDOW_WIDTH = 500
@@ -13,6 +33,9 @@ available_assets = []
 unreal_export_path = r"C:\Users\Acer\Documents\maya_unreal\maya_test\export_to_unreal"
 scatter_assets_path = r"C:\Users\Acer\Documents\maya_unreal\maya_test\scatter_assets"
 fbx_import_path = r"C:\Users\Acer\Documents\maya_unreal\maya_test"
+
+# Create an instance of ImportTools
+import_tools = ImportTools()
 
 def browse_folder():
     """Browse for a folder containing .fbx files."""
@@ -91,6 +114,8 @@ def create_import_ui(root):
     column = cmds.columnLayout(p=frame, adjustableColumn=True)
     cmds.textField('fbxImportPath', text=fbx_import_path, editable=False, parent=column)
     cmds.button(label="Browse Folder", parent=column, command=lambda _: browse_folder())
+    #Import the Stuff
+    cmds.button(label="Import Files", parent=column, command=lambda _: import_tools.cmd_import(fbx_import_path, fbx_files))
     cmds.textScrollList('importList', parent=column, height=80) 
     if fbx_import_path:
         cmds.textField('fbxImportPath', edit=True, text=fbx_import_path)

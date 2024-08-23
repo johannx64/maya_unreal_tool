@@ -1,3 +1,7 @@
+import maya.cmds as cmds
+import os
+import sys
+
 class ExportTools(object):
     def _fix_naming_convention(self, old_mesh_name: str, vers: str, cur_mesh) -> str:
         """
@@ -45,7 +49,7 @@ class ExportTools(object):
                 cmds.file(destination_path, force=True, options="v=0;", typ="FBX export", pr=True, es=True)
 
 class ImportTools(object):
-    def cmd_import(self, folder) -> None:
+    def cmd_import(self, folder, fbx_files) -> None:
         """
         Command to import .fbx files into the Maya scene.
         :param folder: The folder containing the .fbx files.
