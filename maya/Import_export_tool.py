@@ -85,6 +85,9 @@ def create_import_ui(root):
     cmds.textField('fbxImportPath', text=fbx_import_path, editable=False, parent=column)
     cmds.button(label="Browse Folder", parent=column, command=lambda _: browse_folder())
     cmds.textScrollList('importList', parent=column, height=80) 
+    if fbx_import_path:
+        cmds.textField('fbxImportPath', edit=True, text=fbx_import_path)
+        populate_fbx_list(fbx_import_path)
 
 def create_assets_ui(root):
     """Create the assets selection UI section."""
@@ -161,6 +164,8 @@ def create_unreal_export_ui(root):
     cmds.textField('unrealExportPath', text=unreal_export_path, editable=False, parent=column)
     cmds.button(label="Browse Folder", parent=column, command=lambda _: browse_unreal_folder())
     cmds.button(label="Export to Unreal!", parent=column, command=lambda _: export_to_unreal())
+    if unreal_export_path:
+        cmds.textField('unrealExportPath', edit=True, text=unreal_export_path)
 
 def create_ui():
     """Create the main UI window."""
