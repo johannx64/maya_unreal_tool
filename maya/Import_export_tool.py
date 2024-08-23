@@ -2,7 +2,7 @@ import maya.cmds as cmds
 import os
 
 # Constants
-WINDOW_WIDTH = 700
+WINDOW_WIDTH = 500
 GRID_HEIGHT = 20
 
 # Global variables to hold the list of FBX files and available assets
