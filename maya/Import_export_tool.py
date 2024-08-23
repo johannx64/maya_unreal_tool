@@ -110,9 +110,12 @@ def create_export_ui():
         # Create a dropdown menu for available assets
         asset_list = cmds.textScrollList(allowMultiSelection=True, height=60, append=available_assets, parent=row)
 
+        # Select all items by default
+        select_all_items(asset_list)
+
         # "Select All" button for the asset list within the row
-        cmds.button(label="Select All", parent=row, command=lambda x=asset_list: select_all_items(x))
-        
+        cmds.button(label="Select All", parent=row, command=lambda x, list=asset_list: select_all_items(list))
+                
         # "Remove" button for the row
         cmds.button(label="Remove", parent=row, command=lambda x=fbx_file, y=row: remove_from_export_list(x, y))
 
