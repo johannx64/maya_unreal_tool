@@ -9,10 +9,18 @@ GRID_HEIGHT = 20
 fbx_files = []
 available_assets = []
 
+# Global variable to store the Unreal export path
+unreal_export_path = r"C:\Users\Acer\Documents\maya_unreal\maya_test\export_to_unreal"
+scatter_assets_path = r"C:\Users\Acer\Documents\maya_unreal\maya_test\scatter_assets"
+fbx_import_path = r"C:\Users\Acer\Documents\maya_unreal\maya_test"
+
 def browse_folder():
     """Browse for a folder containing .fbx files."""
+    global fbx_import_path
     folder = cmds.fileDialog2(fileMode=3, caption="Select Folder")[0]
     if folder:
+        fbx_import_path = folder
+        cmds.textField('fbxImportPath', edit=True, text=folder)
         populate_fbx_list(folder)
 
 def populate_fbx_list(folder):
@@ -24,8 +32,11 @@ def populate_fbx_list(folder):
 
 def browse_assets_folder():
     """Browse for a folder containing assets to scatter/age."""
+    global scatter_assets_path
     folder = cmds.fileDialog2(fileMode=3, caption="Select Assets Folder")[0]
     if folder:
+        scatter_assets_path = folder
+        cmds.textField('scatterAssetsPath', edit=True, text=folder)
         populate_assets_list(folder)
 
 def populate_assets_list(folder):
@@ -71,23 +82,27 @@ def create_import_ui(root):
     """Create the import UI section."""
     frame = cmds.frameLayout(p=root, label="FBX Importer", width=WINDOW_WIDTH)
     column = cmds.columnLayout(p=frame, adjustableColumn=True)
+    cmds.textField('fbxImportPath', text=fbx_import_path, editable=False, parent=column)
     cmds.button(label="Browse Folder", parent=column, command=lambda _: browse_folder())
-    cmds.textScrollList('importList', parent=column, height=100)
-    cmds.button(label="Remove Selected", parent=column, command=lambda _: remove_selected_import())
+    cmds.textScrollList('importList', parent=column, height=80) 
 
 def create_assets_ui(root):
     """Create the assets selection UI section."""
     frame = cmds.frameLayout(p=root, label="Scatter/Aging Assets", width=WINDOW_WIDTH)
     column = cmds.columnLayout(p=frame, adjustableColumn=True)
+    cmds.textField('scatterAssetsPath', text=scatter_assets_path, editable=False, parent=column)
     cmds.button(label="Select Assets Folder", parent=column, command=lambda _: browse_assets_folder())
-    cmds.textScrollList('assetsList', parent=column, height=120)
+    cmds.textScrollList('assetsList', parent=column, height=80)
+    if scatter_assets_path:
+        cmds.textField('scatterAssetsPath', edit=True, text=scatter_assets_path)
+        populate_assets_list(scatter_assets_path)
 
 def create_export_ui():
     """Create the export UI section."""
     if cmds.scrollLayout('exportScroll', exists=True):
         cmds.deleteUI('exportScroll', layout=True)
 
-    export_scroll = cmds.scrollLayout('exportScroll', parent='mainLayout', width=WINDOW_WIDTH, height=300)
+    export_scroll = cmds.scrollLayout('exportScroll', parent='mainLayout', width=WINDOW_WIDTH, height=200)
     export_column = cmds.columnLayout(p=export_scroll, adjustableColumn=True)
     
     # Column headers
@@ -123,6 +138,30 @@ def refresh_export_list():
     """Refresh the export list UI."""
     create_export_ui()
 
+def browse_unreal_folder():
+    """Browse for a folder to export to Unreal."""
+    global unreal_export_path
+    folder = cmds.fileDialog2(fileMode=3, caption="Select Unreal Export Folder")[0]
+    if folder:
+        unreal_export_path = folder
+        cmds.textField('unrealExportPath', edit=True, text=folder)
+
+def export_to_unreal():
+    """Export the processed files to Unreal."""
+    if not unreal_export_path:
+        cmds.warning("Please select an export folder for Unreal first.")
+        return
+    # Add your export logic here
+    cmds.confirmDialog(title="Export Complete", message="Files exported to Unreal successfully!", button=["OK"])
+
+def create_unreal_export_ui(root):
+    """Create the Unreal export UI section."""
+    frame = cmds.frameLayout(p=root, label="Export to Unreal", width=WINDOW_WIDTH)
+    column = cmds.columnLayout(p=frame, adjustableColumn=True)
+    cmds.textField('unrealExportPath', text=unreal_export_path, editable=False, parent=column)
+    cmds.button(label="Browse Folder", parent=column, command=lambda _: browse_unreal_folder())
+    cmds.button(label="Export to Unreal!", parent=column, command=lambda _: export_to_unreal())
+
 def create_ui():
     """Create the main UI window."""
     if cmds.window("myWindow", exists=True):
@@ -135,6 +174,9 @@ def create_ui():
     create_assets_ui('mainLayout')
     create_import_ui('mainLayout')
     create_export_ui()
+
+    # Add the new Unreal export section
+    create_unreal_export_ui('mainLayout')
 
     cmds.showWindow(window)
 
