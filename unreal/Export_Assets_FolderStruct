@@ -1,0 +1,80 @@
+import unreal
+import os
+assets_path = r"C:\Users\stefa\Desktop\scatter_assets\Unreal_High"
+folder_path = r'/Game/Megascans'  # Specify the root folder in Unreal
+def get_static_mesh_assets(root_folder):
+    """
+    Retrieves all Static Mesh assets from the specified Unreal folder and its subfolders.
+    Returns a list of tuples containing the asset and its Unreal package path.
+    """
+    asset_registry = unreal.AssetRegistryHelpers.get_asset_registry()
+    # Create an asset filter for static meshes
+    asset_filter = unreal.ARFilter(
+        package_paths=[root_folder],
+        recursive_paths=True,
+        class_names=["StaticMesh"]
+    )
+    # Retrieve the assets using the filter
+    found_assets = asset_registry.get_assets(asset_filter)
+    if not found_assets:
+        unreal.log("No static meshes found in the specified folder.")
+        return []
+    asset_list = []
+    for asset_data in found_assets:
+        asset = asset_data.get_asset()
+        if isinstance(asset, unreal.StaticMesh):
+            # Get the asset's package path
+            asset_path = str(asset_data.package_path)
+            asset_list.append((asset, asset_path))
+        else:
+            unreal.log_warning("Asset type not supported for export: {}".format(asset_data.asset_name))
+    return asset_list
+def create_export_folders_and_export_meshes(asset_list):
+    """
+    Creates the necessary folder structure and exports all static meshes to the corresponding folder.
+    """
+    for asset, asset_path in asset_list:
+        asset_name = asset.get_name()
+        # Compute the relative path by removing '/Game' from the Unreal asset path
+        relative_path = asset_path.replace('/Game/', '').strip('/')
+        
+        # Create the corresponding local export folder (one folder per Unreal subdirectory, not per asset)
+        export_folder = os.path.join(assets_path, os.path.dirname(relative_path))
+        os.makedirs(export_folder, exist_ok=True)
+        # Set the export file path
+        export_filename = os.path.join(export_folder, asset_name + '.fbx')
+        # Log export progress
+        unreal.log("Exporting mesh: {}".format(asset_name))
+        # Create and configure the export task
+        export_task = unreal.AssetExportTask()
+        export_task.automated = True
+        export_task.object = asset
+        export_task.prompt = False
+        export_task.filename = export_filename
+        # Set export options
+        export_options = unreal.FbxExportOption()
+        export_options.export_source_mesh = True  # Export the source mesh only
+        export_options.level_of_detail = False  # Disable LODs
+        export_task.options = export_options
+        # Create the FBX exporter and run the export task
+        fbx_exporter = unreal.StaticMeshExporterFBX()
+        export_task.exporter = fbx_exporter
+        # Perform the export task
+        result = fbx_exporter.run_asset_export_task(export_task)
+        if result:
+            unreal.log("Successfully exported Static Mesh: {}".format(asset_name))
+        else:
+            unreal.log_error("Failed to export Static Mesh: {}".format(asset_name))
+    unreal.log("Mesh export process completed.")
+def export_all_meshes_in_folder(root_folder):
+    """
+    Main function that gathers all static meshes in the folder and subfolders,
+    creates the necessary folder structure, and exports all static meshes.
+    """
+    asset_list = get_static_mesh_assets(root_folder)
+    if asset_list:
+        create_export_folders_and_export_meshes(asset_list)
+    else:
+        unreal.log("No static meshes to export.")
+# Call the main function to export all meshes in the folder
+export_all_meshes_in_folder(folder_path)
