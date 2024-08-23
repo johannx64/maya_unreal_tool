@@ -1,0 +1,114 @@
+EXPORT_NAMING.txtimport unreal
+import os
+assets_path = r"C:\Users\stefa\Desktop\scatter_assets\Unreal_High"
+# Set the root folder where the Static Meshes are located
+folder_path = r'/Game/Megascans'  # Change this to the correct folder in Unreal
+def clean_asset_name(asset_name):
+    """
+    Cleans the asset name by:
+    1. Removing the "S_" prefix.
+    2. Cleaning up the core name and formatting it.
+    3. Removing random characters between the core name and the "Var[n]" part.
+    """
+    
+    # Step 1: Remove the "S_" prefix if it exists
+    if asset_name.startswith("S_"):
+        asset_name = asset_name[2:]  # Remove 'S_'
+    
+    # Step 2: Locate the last occurrence of "_Var"
+    var_index = asset_name.lower().rfind('_var')
+    
+    if var_index != -1:
+        # Step 3: Go backward from "_Var" to find the previous underscore
+        before_var_index = asset_name.rfind('_', 0, var_index)
+        
+        # Step 4: Rebuild the name, keeping everything up to the previous underscore and adding the "_Var[n]" part
+        core_name_part = asset_name[:before_var_index]  # Everything before the last valid underscore
+        var_part = asset_name[var_index:]  # The "_Var[n]" part including and after "_Var"
+        
+        # Rebuild the asset name by removing the random characters between the core name and "_Var"
+        asset_name = core_name_part + var_part
+    # Step 5: Split the remaining cleaned name by underscores for further processing
+    parts = asset_name.split('_')
+    
+    # Step 6: Start with an empty core name and default the variant to "1"
+    core_name = ""
+    variant_number = "1"
+    # Step 7: Go through each part and figure out what it is (core name or variant number)
+    for part in parts:
+        if part.lower().startswith('var'):
+            # This part starts with "Var", so grab the number after "Var"
+            variant_number = part[3:]  # Get the variant number
+        elif 'lod' not in part.lower():
+            # If the part doesn't mention LOD, it's probably part of the core name
+            core_name += part + " "
+    # Step 8: Clean up the core name (capitalize it, replace spaces with underscores)
+    core_name = core_name.strip().title().replace(' ', '_')
+    # Step 9: Put it all together as 'SM_CoreName_Var[n]'
+    new_name = f"SM_{core_name}_Var{variant_number}"
+    
+    return new_name
+def export_all_meshes_in_folder(root_folder):
+    """
+    Find and export all Static Meshes in the folder and subfolders without altering the original assets in Unreal.
+    """
+    asset_registry = unreal.AssetRegistryHelpers.get_asset_registry()
+    
+    # Set up the filter to find Static Meshes in the specified folder
+    asset_filter = unreal.ARFilter(
+        package_paths=[root_folder],
+        recursive_paths=True,
+        class_names=["StaticMesh"]
+    )
+    
+    # Get all the assets that match the filter
+    found_assets = asset_registry.get_assets(asset_filter)
+    
+    if not found_assets:
+        unreal.log("No assets found for export in the specified folder.")
+        return
+    
+    unreal.log("Starting export of Static Meshes from folder: {}".format(root_folder))
+    
+    for asset_data in found_assets:
+        asset = asset_data.get_asset()
+        if isinstance(asset, unreal.StaticMesh):
+            original_asset_name = asset.get_name()
+            unreal.log("Original asset name: {}".format(original_asset_name))
+            
+            # Clean up the asset name for exporting (but do not rename the asset in Unreal)
+            new_asset_name = clean_asset_name(original_asset_name)
+            unreal.log("Exporting asset as: {}".format(new_asset_name))
+            
+            # Set up the export task
+            export_task = unreal.AssetExportTask()
+            export_task.automated = True  # No need for user interaction
+            export_task.object = asset
+            export_task.prompt = False
+            
+            # Export the mesh to the specified folder
+            export_task.filename = os.path.join(assets_path, new_asset_name + '.fbx')
+            
+            # Configure the export options (export only the highest LOD)
+            export_options = unreal.FbxExportOption()
+            export_options.export_source_mesh = True  # Only export the source mesh (highest LOD)
+            export_options.level_of_detail = False  # No need to export other LODs
+            export_task.options = export_options
+            
+            # Set the exporter to FBX format
+            fbx_exporter = unreal.StaticMeshExporterFBX()
+            export_task.exporter = fbx_exporter
+            
+            # Run the export task and check if it succeeded
+            result = fbx_exporter.run_asset_export_task(export_task)
+            
+            if result:
+                unreal.log("Successfully exported Static Mesh as: {}".format(new_asset_name))
+            else:
+                unreal.log_error("Failed to export Static Mesh: {}".format(new_asset_name))
+        else:
+            unreal.log_warning("Asset type not supported for export: {}".format(asset_data.asset_name))
+    
+    unreal.log("Mesh export process completed.")
+# Run the export function for all meshes in the folder
+export_all_meshes_in_folder(folder_path)
