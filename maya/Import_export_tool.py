@@ -47,9 +47,15 @@ def populate_assets_list(folder):
 
 def refresh_import_list():
     """Refresh the import list UI."""
+    global fbx_files  # Ensure you're referencing the global fbx_files variable
+    
+    # Clear the existing items in the import list UI
     cmds.textScrollList('importList', edit=True, removeAll=True)
+    
+    # Add the updated list of .fbx files to the UI
     for fbx_file in fbx_files:
         cmds.textScrollList('importList', edit=True, append=fbx_file)
+
 
 def refresh_assets_list():
     """Refresh the assets list UI."""
@@ -71,12 +77,13 @@ def select_all_items(asset_list):
     if all_items:
         cmds.textScrollList(asset_list, edit=True, selectItem=all_items)
 
-def remove_from_export_list(fbx, row):
+def remove_from_export_list(fbx):
     """Remove an item from the export list."""
     global fbx_files
     fbx_files = [item for item in fbx_files if item != fbx]
-    cmds.deleteUI(row, layout=True)
+    refresh_export_list()
     refresh_import_list()
+
 
 def create_import_ui(root):
     """Create the import UI section."""
@@ -135,8 +142,8 @@ def create_export_ui():
         cmds.button(label="Select All", parent=row, command=lambda x, list=asset_list: select_all_items(list))
                 
         # "Remove" button for the row
-        cmds.button(label="Remove", parent=row, command=lambda x=fbx_file, y=row: remove_from_export_list(x, y))
-
+        cmds.button(label="Remove", parent=row, command=lambda x, fbx=fbx_file: remove_from_export_list(fbx))
+        
 def refresh_export_list():
     """Refresh the export list UI."""
     create_export_ui()
