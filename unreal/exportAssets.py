@@ -1,6 +1,9 @@
 import unreal
-
+import os
 assets_path = ".\\assets"
+
+# Specify the folder path where .fbx files are located
+folder_path = r'C:\\Users\\stefa\\Pictures\\unrealscript\\core\\maya\\'
 
 def exportSelectedMeshes():
     """
@@ -44,40 +47,37 @@ def exportSelectedMeshes():
     
     unreal.log("Mesh export process completed.")
 
-def importAssets():
-    """
-    Import an FBX asset into the project with specific material import options,
-    print the result, and ensure automatic import without any dialogs.
-    """
-    # List of FBX files to import
-    fileNames = [
-        r'C:\Users\stefa\Pictures\unrealscript\core\maya\exported_bone.fbx',
-    ]
-    
-    # Destination path where the assets will be imported
-    destination_path = r'/Game/imports2/'
-    
-    # Reference to Asset Tools for importing
-    assetTools = unreal.AssetToolsHelpers.get_asset_tools()
+ # Function to import FBX file into Unreal
 
-    for fileName in fileNames:
-        # Set up FBX import options
-        fbx_import_options = unreal.FbxImportUI()
-        fbx_import_options.automated = True
-        fbx_import_options.import_materials = True
-        fbx_import_options.material_search_location = unreal.MaterialSearchLocation.ALL_ASSETS
-        fbx_import_options.import_as_skeletal = False  # Assuming it's a static mesh
-        
-        # Set material import method to "Do not create material"
-        fbx_import_options.static_mesh_import_data.import_materials = False
-        
-        # Perform the import
-        imported_assets = unreal.AssetToolsHelpers.get_asset_tools().import_assets_automated_with_import_options(
-            fileNames, destination_path, fbx_import_options
-        )
-        
-        if imported_assets:
-            for asset in imported_assets:
-                unreal.log("Successfully imported: {}".format(asset.get_name()))
-        else:
-            unreal.log_error("Failed to import assets.")
+def import_fbx(file_path, destination_path):
+    fbx_import_ui = unreal.FbxImportUI()
+    fbx_import_ui.automated_import_should_detect_type = True
+    fbx_import_ui.import_materials = True
+    fbx_import_ui.import_textures = True
+    fbx_import_ui.import_as_skeletal = False
+    fbx_import_ui.import_animations = False
+    
+    # Define the import task
+    task = unreal.AssetImportTask()
+    task.filename = file_path
+    task.destination_path = destination_path
+    task.destination_name = ""
+    task.automated = True
+    task.save = True
+    task.options = fbx_import_ui
+    
+    # Import the FBX
+    unreal.AssetToolsHelpers.get_asset_tools().import_asset_tasks([task])
+    
+def importAssets():
+    # Search for all .fbx files in the folder
+    for root, dirs, files in os.walk(folder_path):
+        for file in files:
+            if file.endswith(".fbx"):
+                file_path = os.path.join(root, file)
+                destination_path = "/Game/imports2/"  # Specify your Unreal destination path here
+                import_fbx(file_path, destination_path)
+                print(f"Imported: {file_path}")
+
+    print("All FBX files have been imported.")
+
