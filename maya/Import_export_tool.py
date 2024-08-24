@@ -6,6 +6,7 @@ import random
 # Constants
 WINDOW_WIDTH = 600
 GRID_HEIGHT = 20
+MOSS_MATERIAL_NAME = "Moss"
 
 # Global variables to hold the list of FBX files and available assets
 fbx_files = []
@@ -232,12 +233,13 @@ class ScatterTools(object):
         print(f"Mesh names extracted from FBX files: {mesh_names}")
         return mesh_names
 
-    def add_moss(self, fbx_files, min_tolerance=10, max_tolerance=60):
+    def add_moss(self, fbx_files, min_tolerance=10, max_tolerance=60, material_name="MossMaterial"):
         """
         Apply moss effect to the specified meshes.
         :param fbx_files: List of FBX filenames to apply the effect to.
         :param min_tolerance: Minimum value for random tolerance.
         :param max_tolerance: Maximum value for random tolerance.
+        :param material_name: Name of the material to apply to the extruded faces.
         """
         mesh_names = self.get_mesh_names_from_fbx(fbx_files)
         
@@ -274,7 +276,7 @@ class ScatterTools(object):
                     print(f"No faces found after extrusion for mesh: {name}")
                 
                 # Create and assign material
-                self.create_and_assign_material(sel)
+                self.create_and_assign_green_material(sel, material_name)
                 
             except TypeError as e:
                 print(f"Error applying effect to mesh {name}: {e}")
@@ -284,6 +286,30 @@ class ScatterTools(object):
                 cmds.polySelectConstraint(dis=True)
                 cmds.select(cl=True)
                 print(f"Completed processing for mesh: {name}")
+
+    def create_and_assign_green_material(self, objects, material_name):
+        """
+        Create a green material and assign it to the given objects.
+        :param objects: List of objects to assign the material to.
+        :param material_name: Name of the material to create.
+        """
+        # Check if the material already exists
+        if not cmds.objExists(material_name):
+            # Create a new lambert material
+            material = cmds.shadingNode('lambert', asShader=True, name=material_name)
+            
+            # Set the color to green
+            cmds.setAttr(material + ".color", 0, 0.5, 0, type="double3")
+        else:
+            material = material_name
+
+        # Assign the material to the objects
+        for obj in objects:
+            cmds.select(obj)
+            cmds.hyperShade(assign=material)
+
+        print(f"Green material '{material_name}' created and assigned to extruded faces.")
+
 
 def move_pivot_to_bottom_center(mesh_name):
     # Ensure the object exists
@@ -616,7 +642,7 @@ def export_to_unreal():
                     # Apply moss effect if moss is checked
                     if moss_value:
                         try:
-                            scatter_tools.add_moss([mesh], min_tolerance=moss_min_tolerance, max_tolerance=moss_max_tolerance)
+                            scatter_tools.add_moss([mesh], min_tolerance=moss_min_tolerance, max_tolerance=moss_max_tolerance, material_name=MOSS_MATERIAL_NAME)
                             print(f"Applied moss effect to {mesh} with tolerance range {moss_min_tolerance} - {moss_max_tolerance}")
                         except Exception as e:
                             print(f"Failed to apply moss effect to {mesh}: {str(e)}")
