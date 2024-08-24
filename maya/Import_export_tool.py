@@ -518,7 +518,38 @@ def browse_unreal_folder():
     if folder:
         unreal_export_path = folder
         cmds.textField('unrealExportPath', edit=True, text=folder)
+import maya.cmds as cmds
 
+def extract_base_name(asset_name):
+    """Extract the base name from the asset file name."""
+    # Remove the prefix (e.g., SM_) and the extension (.fbx)
+    base_name = asset_name.split('_', 1)[-1]  # Remove prefix
+    base_name = base_name.rsplit('.', 1)[0]  # Remove file extension
+    
+    # Optionally, remove any suffix after the last underscore
+    base_name = base_name.rsplit('_', 1)[0]
+    
+    return base_name.lower()  # Convert to lowercase for case-insensitive comparison
+
+def find_similar_mesh(asset_name):
+    """Find a mesh in the scene with a name similar to the given asset name."""
+    # Extract the base name from the asset name
+    base_name = extract_base_name(asset_name)
+    
+    # Get all meshes in the scene
+    mesh_list = cmds.ls(type="mesh", long=True)
+    
+    # Iterate through the meshes and find one with a similar name
+    for mesh in mesh_list:
+        # Get the transform node (the parent of the mesh)
+        transform_node = cmds.listRelatives(mesh, parent=True)
+        if transform_node:
+            transform_name = transform_node[0]
+            # Convert transform name to lowercase for comparison
+            if base_name in transform_name.lower():
+                return transform_name  # Return the transform node name
+    
+    return None  # No similar mesh found
 def export_to_unreal():
     """Export each mesh individually to the specified Unreal export path."""
     global export_ui_elements, scatter_num_instances, scatter_scale_min, scatter_scale_max, scatter_size, moss_min_tolerance, moss_max_tolerance
@@ -535,11 +566,12 @@ def export_to_unreal():
     # Get export prefix
     export_prefix = cmds.textField('exportPrefix', query=True, text=True)
 
-    export_items = []  # Collect items to print later
-    scatter_tools = ScatterTools()  # Assuming ScatterTools class is defined and initialized somewhere
+
 
     # Loop through each FBX file and export it
     for fbx_file, elements in export_ui_elements.items():
+        export_items = []  # Collect items to print later
+        scatter_tools = ScatterTools()  # Assuming ScatterTools class is defined and initialized somewhere
         
         # Define the source path of the FBX file
         source_path = os.path.join(current_project_path, fbx_file)
@@ -591,7 +623,7 @@ def export_to_unreal():
 
                     # Scatter objects if plants are checked
                     if plants_value:
-                        n = 1
+                        n = 0
                         try:
                             for asset in selected_assets:
                                 # Construct the full path for each scatter asset
@@ -603,9 +635,10 @@ def export_to_unreal():
                                     mesh_list = cmds.ls(type="mesh")
                                     print("###############")
                                     print(surface_mesh[:-5])
+                                    scatter_asset_name = find_similar_mesh(asset)
                                     scatter_tools.scatter_mesh_on_surface(
                                         surface=surface_mesh[:-5],
-                                        custom_mesh=mesh_list[n],
+                                        custom_mesh=scatter_asset_name,
                                         num_instances=scatter_num_instances,
                                         scale_variation=(scatter_scale_min, scatter_scale_max),
                                         size=scatter_size
@@ -620,6 +653,9 @@ def export_to_unreal():
                 cmds.file(save=True, type='FBX export')
                 
                 print(f"Exported {fbx_file} to {destination_path}")
+                # Reset export_ui_elements after the export process
+                #cmds.file(new=True, force=True)
+                #reset_environment()
             except Exception as e:
                 print(f"Failed to export {fbx_file}: {str(e)}")
         else:
@@ -630,8 +666,7 @@ def export_to_unreal():
     for item in export_items:
         print(item)
 
-    # Reset export_ui_elements after the export process
-    export_ui_elements.clear()
+
 
     cmds.confirmDialog(title="Export Complete", message="Files exported to Unreal successfully!", button=["OK"])
 
@@ -664,6 +699,27 @@ def create_unreal_export_ui(root):
 
     if unreal_export_path:
         cmds.textField('unrealExportPath', edit=True, text=unreal_export_path)
+def reset_environment():
+    global fbx_files
+    fbx_files = []
+    global available_assets
+    available_assets = []
+    global export_ui_elements
+    export_ui_elements = {}
+    global scatter_num_instances
+    scatter_num_instances = 20
+    global scatter_scale_min
+    scatter_scale_min = 0.5
+    global scatter_scale_max
+    scatter_scale_max = 2.0
+    global scatter_size
+    scatter_size = 0.5
+    global moss_min_tolerance
+    moss_min_tolerance = 10
+    global moss_max_tolerance
+    moss_max_tolerance = 60
+    create_ui()
+    print("Environment has been reset.")
 
 def create_ui():
     """Create the main UI window."""
