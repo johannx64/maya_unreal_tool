@@ -132,7 +132,7 @@ class ImportTools(object):
             print("No meshes to import, analyze folder structure first!")
 
 class ScatterTools(object):
-    def scatter_mesh_on_surface(self, surface, custom_mesh, num_instances=20, scale_variation=(1, 1), size=1.0):
+    def scatter_mesh_on_surface(self, asset, surface, asset_path, num_instances=20, scale_variation=(1, 1), size=1.0):
         """
         Scatter instances of a custom mesh on the surface mesh using a clone of the original mesh.
         
@@ -143,15 +143,13 @@ class ScatterTools(object):
         - scale_variation: tuple of two floats, minimum and maximum scale factors.
         - size: float, size of each instance.
         """
+        #scatter_asset_name = find_similar_mesh(asset)
         # Validate surface hierarchy.
         if not cmds.objExists(surface):
             raise ValueError(f"Surface mesh '{surface}' does not exist in the scene.")
 
-        # Clone the custom mesh for scattering.
-        cloned_mesh = cmds.duplicate(custom_mesh, name=custom_mesh + '_clone')[0]
-
         # Create a group to contain all instances of the cloned mesh.
-        group_meshes = cmds.group(empty=True, name=custom_mesh + '_instances_grp#')
+        group_meshes = cmds.group(empty=True, name='_instances_grp#')
 
         # Get the surface mesh's faces.
         faces = cmds.polyEvaluate(surface, face=True)
@@ -169,6 +167,15 @@ class ScatterTools(object):
 
         # Scatter the cloned mesh on upward-facing faces.
         for _ in range(num_instances):
+            # Clone the custom mesh for scattering.
+            # Import the custom mesh
+            
+            imported_objects = cmds.file(asset_path, i=True,type="FBX", namespace=":",defaultExtensions=False,removeDuplicateNetworks=True ) # This flag helps prevent duplicate materials
+                        
+            #cmds.file(asset_path, i=True, type="FBX", mergeNamespacesOnClash=True, namespace=":", removeDuplicateNetworks=True)
+            custom_mesh = find_similar_mesh(asset)
+
+            cloned_mesh = cmds.duplicate(custom_mesh, name=custom_mesh + '_clone')[0]
             obj = cmds.instance(cloned_mesh)
             # Select a random face from the upward-facing list.
             face_id = random.choice(upward_faces)
@@ -207,15 +214,19 @@ class ScatterTools(object):
                     
                     # Parent the custom mesh instance to the group.
                     cmds.parent(obj[0], group_meshes)
+                    cmds.delete(cloned_mesh)
+                    cmds.delete(custom_mesh)
 
         # Parent the group of instances to the surface mesh.
         cmds.parent(group_meshes, surface)
-
+        #group = cmds.group(group_meshes, name="new_group")
+        # Grouping the meshes together with the surface
+        #new_group = cmds.group(group_meshes ,surface, name="grouped_surface_and_meshes")
         # Clean up history for the cloned mesh.
-        cmds.delete(cloned_mesh, ch=True)
+        #cmds.hide(cloned_mesh)
 
         # Optionally hide the original custom mesh to avoid clutter.
-        cmds.hide(custom_mesh)
+        #cmds.delete(custom_mesh)
 
         return group_meshes, custom_mesh
     def create_and_assign_material(self, selection):
@@ -336,6 +347,34 @@ def delete_objects_ending_with(suffix):
         print(f"Deleted objects: {', '.join(objects_to_delete)}")
     else:
         print("No objects found with the specified suffix.")
+def remove_duplicate_materials():
+    """Remove duplicate materials from the scene."""
+    all_materials = cmds.ls(materials=True)
+    unique_materials = {}
+
+    for material in all_materials:
+        # Get the material's color (or other unique property)
+        if cmds.objExists(material + ".color"):
+            color = cmds.getAttr(material + ".color")[0]
+            key = f"{color[0]:.3f},{color[1]:.3f},{color[2]:.3f}"
+        else:
+            key = material  # Use the material name as a fallback
+
+        if key not in unique_materials:
+            unique_materials[key] = material
+        else:
+            # If this is a duplicate, replace it with the first instance
+            original_material = unique_materials[key]
+            # Find all objects using this material
+            objects = cmds.ls(cmds.listConnections(material), type="mesh")
+            if objects:
+                # Assign the original material to these objects
+                cmds.hyperShade(assign=original_material, objects=objects)
+            # Delete the duplicate material
+            cmds.delete(material)
+
+    print(f"Removed {len(all_materials) - len(unique_materials)} duplicate materials.")
+
 def delete_invisible_meshes():
     # List all mesh shapes in the scene
     all_meshes = cmds.ls(type='mesh', long=True)
@@ -687,7 +726,6 @@ def browse_unreal_folder():
     if folder:
         unreal_export_path = folder
         cmds.textField('unrealExportPath', edit=True, text=folder)
-import maya.cmds as cmds
 
 def extract_base_name(asset_name):
     """Extract the base name from the asset file name."""
@@ -737,6 +775,7 @@ def export_to_unreal():
 
     # Loop through each FBX file and export it
     for fbx_file, elements in export_ui_elements.items():
+        cmds.file(new=True, force=True)
         export_items = []  # Collect items to print later
         
         # Define the source path of the FBX file
@@ -791,11 +830,11 @@ def export_to_unreal():
                                 asset_path = os.path.join(scatter_assets_path, asset)
                                 if os.path.exists(asset_path):
                                     # Import the FBX file
-                                    cmds.file(asset_path, i=True, type="FBX", mergeNamespacesOnClash=False, namespace=":")
-                                    scatter_asset_name = find_similar_mesh(asset)
+                                    
                                     group_meshes, original_mesh = scatter_tools.scatter_mesh_on_surface(
+                                        asset=asset,
                                         surface=surface_mesh[:-5],
-                                        custom_mesh=scatter_asset_name,
+                                        asset_path=asset_path,
                                         num_instances=scatter_num_instances,
                                         scale_variation=(scatter_scale_min, scatter_scale_max),
                                         size=scatter_size
@@ -804,12 +843,9 @@ def export_to_unreal():
                             print(f"Scattered objects on {mesh}")
                         except Exception as e:
                             print(f"Failed to scatter objects on {mesh}: {str(e)}")
-                objects_with_children = find_objects_with_children()
-                print("Objects with children:")
-                root = str(objects_with_children[0])
-                print(root)
-                get_objects_with_children(root)
+
                 # Ensure that all changes are saved before exporting
+                remove_duplicate_materials()
                 cmds.file(rename=destination_path)
                 # Call the function to delete objects ending with "clone"
                 #delete_objects_ending_with("clone")
