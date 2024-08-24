@@ -1,25 +1,7 @@
 import maya.cmds as cmds
 import os
 import sys
-
-# Correctly add the path
-sys.path.append(r'C:\Users\Acer\Documents\maya_unreal\src\maya')
-
-# Print sys.path to ensure the path is correctly added
-print("sys.path:", sys.path)
-
-# Try importing the module
-try:
-    import functions
-    import importlib
-    importlib.reload(functions)  # Reload if you've made changes
-    from functions import ImportTools
-    print("ImportTools successfully imported.")
-except ImportError as e:
-    print(f"ImportError: {e}")
-except Exception as e:
-    print(f"An error occurred: {e}")
-
+import random
 
 # Constants
 WINDOW_WIDTH = 500
@@ -28,15 +10,284 @@ GRID_HEIGHT = 20
 # Global variables to hold the list of FBX files and available assets
 fbx_files = []
 available_assets = []
+# Dictionary to store UI element references
+export_ui_elements = {}
+
 
 # Global variable to store the Unreal export path
 unreal_export_path = r"C:\Users\Acer\Documents\maya_unreal\maya_test\export_to_unreal"
 scatter_assets_path = r"C:\Users\Acer\Documents\maya_unreal\maya_test\scatter_assets"
 fbx_import_path = r"C:\Users\Acer\Documents\maya_unreal\maya_test"
+current_project_path = fbx_import_path
+# Define a custom class to hold the data for each export item
+class ExportItem:
+    def __init__(self, name, path, moss, plants, selected_asset):
+        self.name = name
+        self.path = path
+        self.moss = moss
+        self.plants = plants
+        self.selected_asset = selected_asset
+
+    def __repr__(self):
+        return f"ExportItem(name={self.name}, path={self.path}, moss={self.moss}, plants={self.plants}, selected_asset={self.selected_asset})"
+
+
+"""
+Custom function to import .fbx files into the scene
+"""
+class ExportTools(object):
+    def _fix_naming_convention(self, old_mesh_name: str, vers: str, cur_mesh) -> str:
+        """
+        Takes the names of meshes and returns Unreal compliant name of the mesh for exporting
+        :param old_mesh_name:
+        :param vers:
+        :param cur_mesh:
+        :return:
+        """
+        correct_name = self._get_mesh_names(cur_mesh)
+        print(correct_name)
+        full_mesh_name = str("SM" + "_" + correct_name + "_" + str(vers))
+        print(full_mesh_name)
+
+        if cmds.objExists(old_mesh_name):
+            cmds.select(old_mesh_name, replace=True)
+            cmds.rename(full_mesh_name)
+            return full_mesh_name
+
+    def export_meshes(self, export_location: str) -> None:
+        """
+        Export all mesh structs to path
+        :param export_location:
+        :return:
+        """
+        # Dictionary to store mapping between origin path and export path
+        origin_export_mapping = {}
+
+        for cur_mesh in self.imported_meshes:
+            mesh_origin = r'{}'.format(str(cur_mesh.root))
+            name = cur_mesh.name
+            textures = cur_mesh.texture_path
+
+            # Returns correct path
+            _corrected_paths = self._check_mesh_origin(origin_export_mapping, mesh_origin, export_location, name)
+            self._create_tex_folder(_corrected_paths, textures)
+
+            for vers in cur_mesh.list_versions:
+                old_mesh_name = name + "_" + vers
+                fixed_names = self._fix_naming_convention(old_mesh_name, vers, cur_mesh)
+                print(fixed_names)
+                cmds.select(fixed_names, r=True)
+                destination_path = os.path.join(_corrected_paths, fixed_names)
+
+                cmds.file(destination_path, force=True, options="v=0;", typ="FBX export", pr=True, es=True)
+
+class ImportTools(object):
+    def cmd_import(self) -> None:
+        """
+        Command to import .fbx files into the Maya scene.
+        :param folder: The folder containing the .fbx files.
+        :return: None
+        """
+        # Append the folder path to each filename in fbx_files
+        fbx_files_path = [os.path.join(fbx_import_path, f) for f in fbx_files]
+
+        if fbx_files_path:
+            # Iterate over each .fbx file in the global fbx_files list
+            for fbx_file in fbx_files_path:
+                print(f"Importing: {fbx_file}")
+                
+                # Import the .fbx file into the scene
+                list_nodes = cmds.file(fbx_file, i=True, type="FBX", returnNewNodes=True)
+                
+                # Get the transform nodes from the imported nodes
+                transform_ls = cmds.ls(list_nodes, type='transform')
+                
+                # If you have a custom shader assignment logic, you can use it here
+                for i, sel in enumerate(transform_ls):
+                    print(f"Assigning shader to: {sel}")
+                    assign_shaders(transform_ls, len(transform_ls), i)
+
+            # Return list of imported meshes to Window class
+            BatchProcessorWindow._mesh_imports = fbx_files_path
+            BatchProcessorWindow._import_path_executed = cmds.textField(self._import_path, q=True, tx=True)
+            print(BatchProcessorWindow._mesh_imports)
+
+            # Group meshes depending on checkboxes
+            self._group_meshes()
+
+            # Execute initialize export function
+            self.export_tab._initialize_export_tab()
+        else:
+            print("No meshes to import, analyze folder structure first!")
+
+class ScatterTools(object):
+    def scatter_mesh_on_surface(surface, custom_mesh, num_instances=20, scale_variation=(1, 1), size=1.0):
+        """
+        Scatter instances of a custom mesh on the surface mesh.
+
+        Parameters:
+        - surface: str, name of the surface mesh to scatter objects on.
+        - custom_mesh: str, name of the custom mesh to scatter.
+        - num_instances: int, number of instances to scatter.
+        - scale_variation: tuple of two floats, minimum and maximum scale factors.
+        - size: float, size of each instance.
+        """
+        # Create a group to contain all instances of the custom mesh.
+        group_meshes = cmds.group(empty=True, name=custom_mesh + '_grp#')
+
+        # Get the mesh's faces.
+        faces = cmds.polyEvaluate(surface, face=True)
+
+        # Iterate through each face to determine its normal.
+        upward_faces = []
+        for face_id in range(faces):
+            # Get the normal vector of the face.
+            face_name = f"{surface}.f[{face_id}]"
+            normal_info = cmds.polyInfo(face_name, faceNormals=True)
+            # Ensure we have valid normal data.
+            if normal_info:
+                normal = normal_info[0]
+                normal_vector = [float(x) for x in normal.split()[2:5]]  # Extract normal vector
+                # Check if the normal is upward-facing (Y-component is positive).
+                if normal_vector[1] > 0.1:  # Adjust threshold as needed.
+                    upward_faces.append(face_id)
+
+        # Scatter custom mesh on upward-facing faces.
+        for _ in range(num_instances):
+            obj = cmds.instance(custom_mesh)
+            # Select a random face from the upward-facing list.
+            face_id = random.choice(upward_faces)
+            face_name = f"{surface}.f[{face_id}]"
+            
+            # Get the vertices of the chosen face.
+            face_verts = cmds.polyListComponentConversion(face_name, ff=True, tv=True)
+            face_verts = cmds.filterExpand(face_verts, sm=31) if face_verts else []
+            if face_verts:
+                # Average the positions of the vertices to approximate the face center.
+                avg_pos = [0, 0, 0]
+                for vert in face_verts:
+                    pos = cmds.pointPosition(vert, w=True)
+                    avg_pos = [avg_pos[i] + pos[i] for i in range(3)]
+                avg_pos = [pos / len(face_verts) for pos in avg_pos]
+            
+                # Set the position of the object.
+                cmds.xform(obj[0], ws=True, t=avg_pos)
+                
+                # Get the normal vector from the face.
+                normal_info = cmds.polyInfo(face_name, fn=True)
+                if normal_info:
+                    normal_vector = [float(x) for x in normal_info[0].split()[2:5]]
+                    
+                    # Calculate rotation based on normal vector.
+                    angle = cmds.angleBetween(euler=True, v1=(0, 1, 0), v2=normal_vector)
+                    cmds.rotate(angle[0], angle[1], angle[2], obj[0])
+                    
+                    # Move the object slightly along the normal.
+                    cmds.move(0.1 * normal_vector[0], 0.1 * normal_vector[1], 0.1 * normal_vector[2], obj[0], r=True)
+                    
+                    # Add random scaling and rotation for a natural appearance.
+                    scale_factor = random.uniform(scale_variation[0], scale_variation[1])
+                    cmds.scale(size * scale_factor, size * scale_factor, size * scale_factor, obj[0])
+                    cmds.rotate(random.uniform(0, 360), random.uniform(0, 360), random.uniform(0, 360), obj[0], r=True)
+                    
+                    # Parent the custom mesh instance to the group.
+                    cmds.parent(obj[0], group_meshes)
+
+        # Parent the group of instances to the surface mesh.
+        cmds.parent(group_meshes, surface)
+
+        # Clean up history for the custom mesh.
+        cmds.delete(ch=True)
+
+
+    def create_and_assign_material(self, selection):
+        """Create a moss material and assign it to the selected faces."""
+        shader = cmds.shadingNode('lambert', asShader=True)
+        shading_grp = cmds.sets(shader, edit=True, forceElement=True)
+        
+        # Set the color or texture of the moss material
+        cmds.setAttr(shader + ".color", 0.0, 0.5, 0.0, type="double3")  # Example green color
+        
+        if selection:
+            print(f"Assigning material to: {selection}")
+            cmds.select(selection)
+            cmds.hyperShade(assign=shader)
+        else:
+            print("No selection to assign material.")
+
+    def get_mesh_names_from_fbx(self, fbx_files):
+        """
+        Convert FBX filenames to mesh names.
+        :param fbx_files: List of FBX filenames.
+        :return: List of mesh names (stripping the '.fbx' extension).
+        """
+        mesh_names = [os.path.splitext(os.path.basename(fbx))[0] for fbx in fbx_files]
+        print(f"Mesh names extracted from FBX files: {mesh_names}")
+        return mesh_names
+
+    def add_moss(self, fbx_files, min_tolerance=10, max_tolerance=60):
+        """
+        Apply moss effect to the specified meshes.
+        :param fbx_files: List of FBX filenames to apply the effect to.
+        :param min_tolerance: Minimum value for random tolerance.
+        :param max_tolerance: Maximum value for random tolerance.
+        """
+        mesh_names = self.get_mesh_names_from_fbx(fbx_files)
+        
+        for name in mesh_names:
+            print(f"Processing mesh: {name}")
+            
+            # Generate a random tolerance value
+            tolerance = random.uniform(min_tolerance, max_tolerance)
+            print(f"Using tolerance: {tolerance}")
+            
+            # Select all faces of the mesh
+            if not cmds.objExists(name):
+                print(f"Mesh {name} does not exist in the scene.")
+                continue
+            
+            cmds.select(name + ".f[*]", r=True)
+            selection = cmds.ls(sl=True)
+            
+            if not selection:
+                print(f"No faces selected for mesh: {name}")
+                continue
+            
+            try:
+                # Apply polySelectConstraint with random tolerance
+                cmds.polySelectConstraint(mode=3, type=8, orient=2, orientaxis=(0,1,0), orientbound=(0, tolerance))
+                cmds.polyExtrudeFacet(kft=True, ltz=0.5)
+                
+                # Get the selected faces after extrusion
+                sel = cmds.ls(sl=True)
+                
+                if sel:
+                    print(f"Faces selected for extrusion: {sel}")
+                else:
+                    print(f"No faces found after extrusion for mesh: {name}")
+                
+                # Create and assign material
+                self.create_and_assign_material(sel)
+                
+            except TypeError as e:
+                print(f"Error applying effect to mesh {name}: {e}")
+            
+            finally:
+                # Clear selection and disable polySelectConstraint
+                cmds.polySelectConstraint(dis=True)
+                cmds.select(cl=True)
+                print(f"Completed processing for mesh: {name}")
 
 # Create an instance of ImportTools
 import_tools = ImportTools()
+# create an instance of ScatterTools
+scatter_tools = ScatterTools()
 
+def remove_extension(filename):
+    # Split the filename and its extension
+    base, ext = os.path.splitext(filename)
+    return base
+    
 def browse_folder():
     """Browse for a folder containing .fbx files."""
     global fbx_import_path
@@ -101,11 +352,20 @@ def select_all_items(asset_list):
         cmds.textScrollList(asset_list, edit=True, selectItem=all_items)
 
 def remove_from_export_list(fbx):
-    """Remove an item from the export list."""
+    """Remove an item from the export list and UI."""
     global fbx_files
-    fbx_files = [item for item in fbx_files if item != fbx]
+    # Remove the item from the fbx_files list
+    if fbx in fbx_files:
+        fbx_files.remove(fbx)
+    
+    # Remove the item from the export_ui_elements dictionary
+    if fbx in export_ui_elements:
+        del export_ui_elements[fbx]
+
+    # Refresh the export UI
     refresh_export_list()
     refresh_import_list()
+
 
 
 def create_import_ui(root):
@@ -115,7 +375,7 @@ def create_import_ui(root):
     cmds.textField('fbxImportPath', text=fbx_import_path, editable=False, parent=column)
     cmds.button(label="Browse Folder", parent=column, command=lambda _: browse_folder())
     #Import the Stuff
-    cmds.button(label="Import Files", parent=column, command=lambda _: import_tools.cmd_import(fbx_import_path, fbx_files))
+    cmds.button(label="Import Files", parent=column, command=lambda _: import_tools.cmd_import())
     cmds.textScrollList('importList', parent=column, height=80) 
     if fbx_import_path:
         cmds.textField('fbxImportPath', edit=True, text=fbx_import_path)
@@ -151,23 +411,29 @@ def create_export_ui():
 
     for fbx_file in fbx_files:
         row = cmds.rowLayout(numberOfColumns=6, adjustableColumn=3, columnWidth6=[50, 50, 250, 200, 100, 100], parent=export_column)
-        cmds.checkBox(label="", value=True, parent=row)
-        cmds.checkBox(label="", value=True, parent=row)
-
-        # Display the name of the FBX file
-        cmds.text(label=fbx_file, align='left', parent=row)
-
-        # Create a dropdown menu for available assets
+        
+        moss_checkbox = cmds.checkBox(label="", value=True, parent=row)
+        plants_checkbox = cmds.checkBox(label="", value=True, parent=row)
+        name_label = cmds.text(label=fbx_file, align='left', parent=row)
         asset_list = cmds.textScrollList(allowMultiSelection=True, height=60, append=available_assets, parent=row)
 
         # Select all items by default
         select_all_items(asset_list)
+
+        # Store references to UI elements
+        export_ui_elements[fbx_file] = {
+            'moss': moss_checkbox,
+            'plants': plants_checkbox,
+            'name': name_label,
+            'asset_list': asset_list
+        }
 
         # "Select All" button for the asset list within the row
         cmds.button(label="Select All", parent=row, command=lambda x, list=asset_list: select_all_items(list))
                 
         # "Remove" button for the row
         cmds.button(label="Remove", parent=row, command=lambda x, fbx=fbx_file: remove_from_export_list(fbx))
+        
         
 def refresh_export_list():
     """Refresh the export list UI."""
@@ -182,11 +448,104 @@ def browse_unreal_folder():
         cmds.textField('unrealExportPath', edit=True, text=folder)
 
 def export_to_unreal():
-    """Export the processed files to Unreal."""
+    """Export each mesh individually to the specified Unreal export path."""
+    global export_ui_elements  # Ensure that we reference the global dictionary
+
     if not unreal_export_path:
         cmds.warning("Please select an export folder for Unreal first.")
         return
-    # Add your export logic here
+
+    # Ensure the export path exists
+    if not os.path.exists(unreal_export_path):
+        os.makedirs(unreal_export_path)
+
+    export_items = []  # Collect items to print later
+    scatter_tools = ScatterTools()  # Assuming ScatterTools class is defined and initialized somewhere
+
+    # Loop through each FBX file and export it
+    for fbx_file, elements in export_ui_elements.items():
+        # Define the source path of the FBX file
+        source_path = os.path.join(current_project_path, fbx_file)
+        # Define the destination path in the Unreal export directory
+        destination_path = os.path.join(unreal_export_path, fbx_file)
+
+        # Query UI elements for current FBX file
+        moss_value = cmds.checkBox(elements['moss'], query=True, value=True)
+        plants_value = cmds.checkBox(elements['plants'], query=True, value=True)
+        name_value = cmds.text(elements['name'], query=True, label=True)
+        selected_assets = cmds.textScrollList(elements['asset_list'], query=True, selectItem=True)
+        
+        export_item = {
+            'name': name_value,
+            'moss': moss_value,
+            'plants': plants_value,
+            'selected_assets': selected_assets
+        }
+
+        # Append to export items list
+        export_items.append(export_item)
+        
+        # Open the file to apply effects and export
+        if os.path.exists(source_path):
+            try:
+                # Open the file
+                cmds.file(source_path, open=True, force=True)
+                
+                # Get the mesh names from the scene
+                mesh_list = cmds.ls(type="mesh")
+                print(f"Mesh names extracted from FBX files: {mesh_list}")
+
+                for mesh in mesh_list:
+                    print(f"Processing mesh: {mesh}")
+
+                    # Apply moss effect if moss is checked
+                    if moss_value:
+                        try:
+                            tolerance = random.uniform(10, 60)
+                            scatter_tools.add_moss([mesh], min_tolerance=10, max_tolerance=60)
+                            print(f"Using tolerance: {tolerance}")
+                            print(f"Completed processing for mesh: {mesh}")
+                        except Exception as e:
+                            print(f"Failed to apply moss effect to {mesh}: {str(e)}")
+
+                    # Scatter objects if plants are checked
+                    if plants_value:
+                        try:
+                            for asset in selected_assets:
+                                # Construct the full path for each scatter asset
+                                asset_path = os.path.join(scatter_assets_path, asset)
+                                if os.path.exists(asset_path):
+                                    cmds.file(asset_path, i=True, type="FBX", mergeNamespacesOnClash=False, namespace=":")
+                                    #scatter_tools.scatter_mesh_on_surface(fbx_file, asset_path)
+                                    scatter_mesh_on_surface(
+                                        surface=fbx_file,
+                                        custom_mesh="S_Gilled_Mushroom_tfstfjhpa_lod5",
+                                        num_instances=20,
+                                        scale_variation=(0.5, 2.0),
+                                        size=1.0
+                                    )
+                            print(f"Scattered objects on {mesh}")
+                        except Exception as e:
+                            print(f"Failed to scatter objects on {mesh}: {str(e)}")
+
+                # Ensure that all changes are saved before exporting
+                cmds.file(rename=destination_path)
+                cmds.file(save=True, type='FBX export')
+                
+                print(f"Exported {fbx_file} to {destination_path}")
+            except Exception as e:
+                print(f"Failed to export {fbx_file}: {str(e)}")
+        else:
+            print(f"Source file {source_path} does not exist.")
+
+    # Print the collected export items
+    print("Collected Export Items:")
+    for item in export_items:
+        print(item)
+
+    # Reset export_ui_elements after the export process
+    export_ui_elements.clear()
+
     cmds.confirmDialog(title="Export Complete", message="Files exported to Unreal successfully!", button=["OK"])
 
 def create_unreal_export_ui(root):
