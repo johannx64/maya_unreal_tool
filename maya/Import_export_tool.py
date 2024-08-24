@@ -407,6 +407,61 @@ def remove_extension(filename):
     # Split the filename and its extension
     base, ext = os.path.splitext(filename)
     return base
+def find_objects_with_children():
+    # List all transforms in the scene
+    all_transforms = cmds.ls(type='transform', long=True)
+    
+    # List to hold objects with children
+    objects_with_children = []
+    
+    for transform in all_transforms:
+        # Get the children of the current transform
+        children = cmds.listRelatives(transform, children=True, fullPath=True) or []
+        
+        if children:
+            # If there are children, add this transform to the list
+            objects_with_children.append(transform)
+    
+    return objects_with_children
+
+def get_objects_with_children(root_name):
+    """Find all objects in the scene that have children and are related to the given root_name."""
+    related_objects = []
+    unrelated_objects = []
+
+    # Get the root object
+    if not cmds.objExists(root_name):
+        print(f"Object '{root_name}' does not exist in the scene.")
+        return
+    
+    # Get all objects in the scene
+    all_objects = cmds.ls(dag=True, long=True)
+    
+    # Find all objects with children
+    objects_with_children = [obj for obj in all_objects if cmds.listRelatives(obj, children=True)]
+    
+    for obj in objects_with_children:
+        if cmds.nodeType(obj) == 'transform':
+            if cmds.listRelatives(obj, children=True):
+                # Check if the object is related to the root_name
+                if root_name in obj:
+                    related_objects.append(obj)
+                else:
+                    unrelated_objects.append(obj)
+
+    # List and select all related objects
+    if related_objects:
+        print("Objects with children related to the root:")
+        for obj in related_objects:
+            print(obj)
+        #cmds.select(related_objects, replace=True)
+    
+    # List objects that are not related
+    if unrelated_objects:
+        print("\nObjects with children NOT related to the root:")
+        for obj in unrelated_objects:
+            print(obj)
+            cmds.delete(obj)
 
 def browse_folder():
     """Browse for a folder containing .fbx files."""
@@ -749,12 +804,16 @@ def export_to_unreal():
                             print(f"Scattered objects on {mesh}")
                         except Exception as e:
                             print(f"Failed to scatter objects on {mesh}: {str(e)}")
-
+                objects_with_children = find_objects_with_children()
+                print("Objects with children:")
+                root = str(objects_with_children[0])
+                print(root)
+                get_objects_with_children(root)
                 # Ensure that all changes are saved before exporting
                 cmds.file(rename=destination_path)
                 # Call the function to delete objects ending with "clone"
-                delete_objects_ending_with("clone")
-                delete_invisible_meshes()
+                #delete_objects_ending_with("clone")
+                #delete_invisible_meshes()
                 cmds.file(save=True, type='FBX export')
                 
                 print(f"Exported {fbx_file} to {destination_path}")
