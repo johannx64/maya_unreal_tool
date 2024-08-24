@@ -21,6 +21,8 @@ scatter_scale_max = 2.0
 scatter_size = 0.5
 moss_min_tolerance = 10
 moss_max_tolerance = 60
+moss_extrusion_scale = 0.5  # Default value, adjust as needed
+
 
 # Global variable to store the Unreal export path
 unreal_export_path = r"C:\Users\Acer\Documents\maya_unreal\maya_test\export_to_unreal"
@@ -234,59 +236,62 @@ class ScatterTools(object):
         print(f"Mesh names extracted from FBX files: {mesh_names}")
         return mesh_names
 
-    def add_moss(self, fbx_files, min_tolerance=10, max_tolerance=60, material_name="MossMaterial"):
-        """
-        Apply moss effect to the specified meshes.
-        :param fbx_files: List of FBX filenames to apply the effect to.
-        :param min_tolerance: Minimum value for random tolerance.
-        :param max_tolerance: Maximum value for random tolerance.
-        :param material_name: Name of the material to apply to the extruded faces.
-        """
-        mesh_names = self.get_mesh_names_from_fbx(fbx_files)
-        
-        for name in mesh_names:
-            print(f"Processing mesh: {name}")
+    def add_moss(self, fbx_files, min_tolerance=10, max_tolerance=60, extrusion_scale=0.5, material_name="MossMaterial"):
+            """
+            Apply moss effect to the specified meshes.
+            :param fbx_files: List of FBX filenames to apply the effect to.
+            :param min_tolerance: Minimum value for random tolerance.
+            :param max_tolerance: Maximum value for random tolerance.
+            :param extrusion_scale: Scale factor for moss extrusion.
+            :param material_name: Name of the material to apply to the extruded faces.
+            """
+            mesh_names = self.get_mesh_names_from_fbx(fbx_files)
             
-            # Generate a random tolerance value
-            tolerance = random.uniform(min_tolerance, max_tolerance)
-            print(f"Using tolerance: {tolerance}")
-            
-            # Select all faces of the mesh
-            if not cmds.objExists(name):
-                print(f"Mesh {name} does not exist in the scene.")
-                continue
-            
-            cmds.select(name + ".f[*]", r=True)
-            selection = cmds.ls(sl=True)
-            
-            if not selection:
-                print(f"No faces selected for mesh: {name}")
-                continue
-            
-            try:
-                # Apply polySelectConstraint with random tolerance
-                cmds.polySelectConstraint(mode=3, type=8, orient=2, orientaxis=(0,1,0), orientbound=(0, tolerance))
-                cmds.polyExtrudeFacet(kft=True, ltz=0.5)
+            for name in mesh_names:
+                print(f"Processing mesh: {name}")
                 
-                # Get the selected faces after extrusion
-                sel = cmds.ls(sl=True)
+                # Generate a random tolerance value
+                tolerance = random.uniform(min_tolerance, max_tolerance)
+                print(f"Using tolerance: {tolerance}")
                 
-                if sel:
-                    print(f"Faces selected for extrusion: {sel}")
-                else:
-                    print(f"No faces found after extrusion for mesh: {name}")
+                # Select all faces of the mesh
+                if not cmds.objExists(name):
+                    print(f"Mesh {name} does not exist in the scene.")
+                    continue
                 
-                # Create and assign material
-                self.create_and_assign_green_material(sel, material_name)
+                cmds.select(name + ".f[*]", r=True)
+                selection = cmds.ls(sl=True)
                 
-            except TypeError as e:
-                print(f"Error applying effect to mesh {name}: {e}")
-            
-            finally:
-                # Clear selection and disable polySelectConstraint
-                cmds.polySelectConstraint(dis=True)
-                cmds.select(cl=True)
-                print(f"Completed processing for mesh: {name}")
+                if not selection:
+                    print(f"No faces selected for mesh: {name}")
+                    continue
+                
+                try:
+                    # Apply polySelectConstraint with random tolerance
+                    cmds.polySelectConstraint(mode=3, type=8, orient=2, orientaxis=(0,1,0), orientbound=(0, tolerance))
+                    
+                    # Use the extrusion_scale parameter for the extrusion
+                    cmds.polyExtrudeFacet(kft=True, ltz=extrusion_scale)
+                    
+                    # Get the selected faces after extrusion
+                    sel = cmds.ls(sl=True)
+                    
+                    if sel:
+                        print(f"Faces selected for extrusion: {sel}")
+                    else:
+                        print(f"No faces found after extrusion for mesh: {name}")
+                    
+                    # Create and assign material
+                    self.create_and_assign_green_material(sel, material_name)
+                    
+                except TypeError as e:
+                    print(f"Error applying effect to mesh {name}: {e}")
+                
+                finally:
+                    # Clear selection and disable polySelectConstraint
+                    cmds.polySelectConstraint(dis=True)
+                    cmds.select(cl=True)
+                    print(f"Completed processing for mesh: {name}")
 
     def create_and_assign_green_material(self, objects, material_name):
         """
@@ -410,6 +415,11 @@ def refresh_import_list():
     # Add the updated list of .fbx files to the UI
     for fbx_file in fbx_files:
         cmds.textScrollList('importList', edit=True, append=fbx_file)
+def clear_export_items():
+    global export_ui_elements
+    for element in export_ui_elements.values():
+        cmds.deleteUI(element, control=True)
+    export_ui_elements.clear()
 
 
 def refresh_assets_list():
@@ -447,7 +457,33 @@ def remove_from_export_list(fbx):
     refresh_export_list()
     refresh_import_list()
 
+def update_scatter_num_instances(*args):
+    global scatter_num_instances
+    scatter_num_instances = cmds.intSliderGrp('scatterNumInstances', query=True, value=True)
 
+def update_scatter_scale_min(*args):
+    global scatter_scale_min
+    scatter_scale_min = cmds.floatSliderGrp('scatterScaleMin', query=True, value=True)
+
+def update_scatter_scale_max(*args):
+    global scatter_scale_max
+    scatter_scale_max = cmds.floatSliderGrp('scatterScaleMax', query=True, value=True)
+
+def update_scatter_size(*args):
+    global scatter_size
+    scatter_size = cmds.floatSliderGrp('scatterSize', query=True, value=True)
+
+def update_moss_min_tolerance(*args):
+    global moss_min_tolerance
+    moss_min_tolerance = cmds.floatSliderGrp('mossMinTolerance', query=True, value=True)
+
+def update_moss_max_tolerance(*args):
+    global moss_max_tolerance
+    moss_max_tolerance = cmds.floatSliderGrp('mossMaxTolerance', query=True, value=True)
+
+def update_moss_extrusion_scale(*args):
+    global moss_extrusion_scale
+    moss_extrusion_scale = cmds.floatSliderGrp('mossExtrusionScale', query=True, value=True)
 
 def create_import_ui(root):
     """Create the import UI section."""
@@ -475,32 +511,33 @@ def create_assets_ui(root):
 
 def create_export_ui():
     """Create the export UI section."""
-    if cmds.scrollLayout('exportScroll', exists=True):
-        cmds.deleteUI('exportScroll', layout=True)
+    if cmds.frameLayout('exportFrame', exists=True):
+        cmds.deleteUI('exportFrame', layout=True)
 
-    export_scroll = cmds.scrollLayout('exportScroll', parent='mainLayout', width=WINDOW_WIDTH, height=400)  # Increased height
-    export_column = cmds.columnLayout(p=export_scroll, adjustableColumn=True)
+    export_frame = cmds.frameLayout('exportFrame', p='mainLayout', label="Export Items", width=WINDOW_WIDTH, collapsable=True, collapse=False)
+    export_column = cmds.columnLayout(p=export_frame, adjustableColumn=True)
     
-    # Add controls for scatter_mesh_on_surface
-    cmds.frameLayout(label="Scatter Controls", collapsable=True, collapse=False, parent=export_column)
-    cmds.columnLayout(adjustableColumn=False)
-    cmds.intSliderGrp('scatterNumInstances', label='Number of Instances', field=True, minValue=1, maxValue=100, value=scatter_num_instances)
-    cmds.floatSliderGrp('scatterScaleMin', label='Min Scale', field=True, minValue=0.1, maxValue=5.0, value=scatter_scale_min)
-    cmds.floatSliderGrp('scatterScaleMax', label='Max Scale', field=True, minValue=0.1, maxValue=5.0, value=scatter_scale_max)
-    cmds.floatSliderGrp('scatterSize', label='Size', field=True, minValue=0.1, maxValue=5.0, value=scatter_size)
-    
-    # Add controls for add_moss
-    cmds.frameLayout(label="Moss Controls", collapsable=True, collapse=False, parent=export_column)
-    cmds.columnLayout(adjustableColumn=False)
-    cmds.floatSliderGrp('mossMinTolerance', label='Min Tolerance', field=True, minValue=0, maxValue=90, value=moss_min_tolerance)
-    cmds.floatSliderGrp('mossMaxTolerance', label='Max Tolerance', field=True, minValue=0, maxValue=90, value=moss_max_tolerance)
-    
+    # Scatter Controls
+    scatter_frame = cmds.frameLayout(p=export_column, label="Scatter Controls", collapsable=True, collapse=False)
+    scatter_column = cmds.columnLayout(p=scatter_frame, adjustableColumn=True)
+    cmds.intSliderGrp('scatterNumInstances', label='Number of Instances', field=True, minValue=1, maxValue=100, value=scatter_num_instances, changeCommand=update_scatter_num_instances)
+    cmds.floatSliderGrp('scatterScaleMin', label='Min Scale', field=True, minValue=0.1, maxValue=5.0, value=scatter_scale_min, changeCommand=update_scatter_scale_min)
+    cmds.floatSliderGrp('scatterScaleMax', label='Max Scale', field=True, minValue=0.1, maxValue=5.0, value=scatter_scale_max, changeCommand=update_scatter_scale_max)
+    cmds.floatSliderGrp('scatterSize', label='Size', field=True, minValue=0.1, maxValue=5.0, value=scatter_size, changeCommand=update_scatter_size)
+
+    # Moss Controls
+    moss_frame = cmds.frameLayout(p=export_column, label="Moss Controls", collapsable=True, collapse=False)
+    moss_column = cmds.columnLayout(p=moss_frame, adjustableColumn=True)
+    cmds.floatSliderGrp('mossMinTolerance', label='Min Tolerance', field=True, minValue=0, maxValue=90, value=moss_min_tolerance, changeCommand=update_moss_min_tolerance)
+    cmds.floatSliderGrp('mossMaxTolerance', label='Max Tolerance', field=True, minValue=0, maxValue=200, value=moss_max_tolerance, changeCommand=update_moss_max_tolerance)
+    cmds.floatSliderGrp('mossExtrusionScale', label='Moss Extrusion', field=True, minValue=0.1, maxValue=10.0, value=moss_extrusion_scale, changeCommand=update_moss_extrusion_scale)
+
     # Export Items List
-    cmds.frameLayout(label="Export Items", collapsable=True, collapse=False, parent=export_column)
-    items_column = cmds.columnLayout(adjustableColumn=True)
+    items_frame = cmds.frameLayout(p=export_column, label="Export Items List", collapsable=True, collapse=False)
+    items_column = cmds.columnLayout(p=items_frame, adjustableColumn=True)
     
     # Column headers
-    cmds.rowLayout(numberOfColumns=6, adjustableColumn=3, columnWidth6=[50, 50, 200, 300, 100, 120], parent=items_column)
+    cmds.rowLayout(numberOfColumns=6, adjustableColumn=3, columnWidth6=[50, 50, 250, 200, 100, 100], parent=items_column)
     cmds.text(label="Moss", align='center')
     cmds.text(label="Plants", align='center')
     cmds.text(label="FBX Name", align='center')
@@ -509,12 +546,12 @@ def create_export_ui():
     cmds.text(label="Remove", align='center')
 
     for fbx_file in fbx_files:
-        row = cmds.rowLayout(numberOfColumns=6, adjustableColumn=3, columnWidth6=[50, 50, 200, 300, 100, 120], parent=items_column)
+        row = cmds.rowLayout(numberOfColumns=6, adjustableColumn=3, columnWidth6=[50, 50, 250, 200, 100, 100], parent=items_column)
         
         moss_checkbox = cmds.checkBox(label="", value=True, parent=row)
         plants_checkbox = cmds.checkBox(label="", value=True, parent=row)
         name_label = cmds.text(label=fbx_file, align='left', parent=row)
-        asset_list = cmds.textScrollList(allowMultiSelection=True, height=90, append=available_assets, parent=row)
+        asset_list = cmds.textScrollList(allowMultiSelection=True, height=60, append=available_assets, parent=row)
 
         # Select all items by default
         select_all_items(asset_list)
@@ -532,11 +569,19 @@ def create_export_ui():
                 
         # "Remove" button for the row
         cmds.button(label="Remove", parent=row, command=lambda x, fbx=fbx_file: remove_from_export_list(fbx))
-        
-        
-def refresh_export_list():
-    """Refresh the export list UI."""
-    create_export_ui()
+
+def refresh_import_list():
+    """Refresh the import list UI."""
+    global fbx_files
+    
+    cmds.textScrollList('importList', edit=True, removeAll=True)
+    
+    for fbx_file in fbx_files:
+        cmds.textScrollList('importList', edit=True, append=fbx_file)
+    
+    # Only refresh the export list if it has changed
+    if set(fbx_files) != set(export_ui_elements.keys()):
+        refresh_export_list()
 
 def browse_unreal_folder():
     """Browse for a folder to export to Unreal."""
@@ -590,11 +635,6 @@ def export_to_unreal():
     if not os.path.exists(unreal_export_path):
         os.makedirs(unreal_export_path)
 
-    # Get export prefix
-    export_prefix = cmds.textField('exportPrefix', query=True, text=True)
-
-
-
     # Loop through each FBX file and export it
     for fbx_file, elements in export_ui_elements.items():
         export_items = []  # Collect items to print later
@@ -603,11 +643,8 @@ def export_to_unreal():
         # Define the source path of the FBX file
         source_path = os.path.join(current_project_path, fbx_file)
         # Define the destination path in the Unreal export directory
-        #destination_path = os.path.join(unreal_export_path, fbx_file)
+        destination_path = os.path.join(unreal_export_path, fbx_file)
 
-        # Use the export prefix
-        destination_filename = export_prefix + os.path.splitext(fbx_file)[0] + ".fbx"
-        destination_path = os.path.join(unreal_export_path, destination_filename)
 
         # Query UI elements for current FBX file
         moss_value = cmds.checkBox(elements['moss'], query=True, value=True)
@@ -638,13 +675,15 @@ def export_to_unreal():
 
                 for mesh in mesh_list:
                     print(f"Processing mesh: {mesh}")
-
-                    # Apply moss effect if moss is checked
                     # Apply moss effect if moss is checked
                     if moss_value:
-                        try:
-                            scatter_tools.add_moss([mesh], min_tolerance=moss_min_tolerance, max_tolerance=moss_max_tolerance, material_name=MOSS_MATERIAL_NAME)
-                            print(f"Applied moss effect to {mesh} with tolerance range {moss_min_tolerance} - {moss_max_tolerance}")
+                        try:                
+                            scatter_tools.add_moss([mesh], 
+                                                    min_tolerance=moss_min_tolerance, 
+                                                    max_tolerance=moss_max_tolerance, 
+                                                    extrusion_scale=moss_extrusion_scale,
+                                                    material_name=MOSS_MATERIAL_NAME)
+                            print(f"Applied moss effect to {mesh} with tolerance range {moss_min_tolerance} - {moss_max_tolerance} and extrusion scale {moss_extrusion_scale}")
                         except Exception as e:
                             print(f"Failed to apply moss effect to {mesh}: {str(e)}")
 
@@ -680,9 +719,7 @@ def export_to_unreal():
                 cmds.file(save=True, type='FBX export')
                 
                 print(f"Exported {fbx_file} to {destination_path}")
-                # Reset export_ui_elements after the export process
-                #cmds.file(new=True, force=True)
-                #reset_environment()
+
             except Exception as e:
                 print(f"Failed to export {fbx_file}: {str(e)}")
         else:
@@ -699,54 +736,13 @@ def export_to_unreal():
 
 def create_unreal_export_ui(root):
     """Create the Unreal export UI section."""
-    frame = cmds.frameLayout(p=root, label="Export to Unreal", width=WINDOW_WIDTH, collapsable=True, collapse=False)
+    frame = cmds.frameLayout(p=root, label="Export to Unreal", width=WINDOW_WIDTH)
     column = cmds.columnLayout(p=frame, adjustableColumn=True)
-
-    # Export path selection
-    cmds.rowLayout(numberOfColumns=3, adjustableColumn=2, columnWidth3=(80, 300, 60),  parent=column)
-    cmds.text(label="Export Path:", width=80, align='right')
-    cmds.textField('unrealExportPath', text=unreal_export_path, editable=False, width=300)
-    cmds.button(label="Browse", command=lambda _: browse_unreal_folder(), width=60)
-    cmds.setParent('..')  # Go back to the column layout
-
-    # Add some space
-    cmds.separator(height=10, style='none')
-
-    # Export prefix
-    cmds.rowLayout(numberOfColumns=2, adjustableColumn=2, columnWidth2=(80, 300),  parent=column)
-    cmds.text(label="Export Prefix:", width=80, align='right')
-    cmds.textField('exportPrefix', text="SM_", width=300)
-    cmds.setParent('..')  # Go back to the column layout
-
-    # Add some space
-    cmds.separator(height=10, style='none')
-
-    # Export button
-    cmds.button(label="Export to Unreal!", parent=column, command=lambda _: export_to_unreal(), height=40, backgroundColor=[0.2, 0.6, 0.2])
-
+    cmds.textField('unrealExportPath', text=unreal_export_path, editable=False, parent=column)
+    cmds.button(label="Browse Folder", parent=column, command=lambda _: browse_unreal_folder())
+    cmds.button(label="Export to Unreal!", parent=column, command=lambda _: export_to_unreal())
     if unreal_export_path:
         cmds.textField('unrealExportPath', edit=True, text=unreal_export_path)
-def reset_environment():
-    global fbx_files
-    fbx_files = []
-    global available_assets
-    available_assets = []
-    global export_ui_elements
-    export_ui_elements = {}
-    global scatter_num_instances
-    scatter_num_instances = 20
-    global scatter_scale_min
-    scatter_scale_min = 0.5
-    global scatter_scale_max
-    scatter_scale_max = 2.0
-    global scatter_size
-    scatter_size = 0.5
-    global moss_min_tolerance
-    moss_min_tolerance = 10
-    global moss_max_tolerance
-    moss_max_tolerance = 60
-    create_ui()
-    print("Environment has been reset.")
 
 def create_ui():
     """Create the main UI window."""
@@ -754,26 +750,15 @@ def create_ui():
         cmds.deleteUI("myWindow", window=True)
 
     window = cmds.window("myWindow", title="FBX Batch Import/Export", widthHeight=(WINDOW_WIDTH, 700), sizeable=True)
-    
-    # Create a form layout as the main container
-    main_form = cmds.formLayout(numberOfDivisions=100)
-    
-    # Create a scroll layout that will contain all other UI elements
-    main_scroll = cmds.scrollLayout('mainScroll', horizontalScrollBarThickness=16, verticalScrollBarThickness=16)
-    
-    # Attach the scroll layout to the form
-    cmds.formLayout(main_form, edit=True, 
-                    attachForm=[(main_scroll, 'top', 0), (main_scroll, 'bottom', 0), 
-                                (main_scroll, 'left', 0), (main_scroll, 'right', 0)])
-    
-    # Create a column layout inside the scroll layout
-    main_column = cmds.columnLayout('mainLayout', adjustableColumn=True, parent=main_scroll)
+    cmds.columnLayout('mainLayout', adjustableColumn=True)
     
     # Create Scatter/Aging Assets, Import, and Export sections
-    create_assets_ui(main_column)
-    create_import_ui(main_column)
+    create_assets_ui('mainLayout')
+    create_import_ui('mainLayout')
     create_export_ui()
-    create_unreal_export_ui(main_column)
+
+    # Add the new Unreal export section
+    create_unreal_export_ui('mainLayout')
 
     cmds.showWindow(window)
 
