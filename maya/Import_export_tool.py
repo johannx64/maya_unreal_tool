@@ -26,8 +26,8 @@ moss_extrusion_scale = 0.5  # Default value, adjust as needed
 
 # Global variable to store the Unreal export path
 unreal_export_path = r"C:\Users\Acer\Documents\maya_unreal\maya_test\export_to_unreal"
-scatter_assets_path = r"C:\Users\Acer\Documents\maya_unreal\maya_test\scatter_assets"
-fbx_import_path = r"C:\Users\Acer\Documents\maya_unreal\maya_test"
+scatter_assets_path = r"C:\Users\Acer\Documents\maya_unreal\Megascans\Megascans\3D_Plants"
+fbx_import_path = r"C:\Users\Acer\Documents\maya_unreal\Megascans\Megascans\Core_Assets"
 current_project_path = fbx_import_path
 # Define a custom class to hold the data for each export item
 class ExportItem:
@@ -134,8 +134,8 @@ class ImportTools(object):
 class ScatterTools(object):
     def scatter_mesh_on_surface(self, surface, custom_mesh, num_instances=20, scale_variation=(1, 1), size=1.0):
         """
-        Scatter instances of a custom mesh on the surface mesh.
-
+        Scatter instances of a custom mesh on the surface mesh using a clone of the original mesh.
+        
         Parameters:
         - surface: str, name of the surface mesh to scatter objects on.
         - custom_mesh: str, name of the custom mesh to scatter.
@@ -143,29 +143,33 @@ class ScatterTools(object):
         - scale_variation: tuple of two floats, minimum and maximum scale factors.
         - size: float, size of each instance.
         """
-        # Create a group to contain all instances of the custom mesh.
-        group_meshes = cmds.group(empty=True, name=custom_mesh + '_grp#')
+        # Validate surface hierarchy.
+        if not cmds.objExists(surface):
+            raise ValueError(f"Surface mesh '{surface}' does not exist in the scene.")
 
-        # Get the mesh's faces.
+        # Clone the custom mesh for scattering.
+        cloned_mesh = cmds.duplicate(custom_mesh, name=custom_mesh + '_clone')[0]
+
+        # Create a group to contain all instances of the cloned mesh.
+        group_meshes = cmds.group(empty=True, name=custom_mesh + '_instances_grp#')
+
+        # Get the surface mesh's faces.
         faces = cmds.polyEvaluate(surface, face=True)
 
         # Iterate through each face to determine its normal.
         upward_faces = []
         for face_id in range(faces):
-            # Get the normal vector of the face.
             face_name = f"{surface}.f[{face_id}]"
             normal_info = cmds.polyInfo(face_name, faceNormals=True)
-            # Ensure we have valid normal data.
             if normal_info:
                 normal = normal_info[0]
                 normal_vector = [float(x) for x in normal.split()[2:5]]  # Extract normal vector
-                # Check if the normal is upward-facing (Y-component is positive).
                 if normal_vector[1] > 0.1:  # Adjust threshold as needed.
                     upward_faces.append(face_id)
 
-        # Scatter custom mesh on upward-facing faces.
+        # Scatter the cloned mesh on upward-facing faces.
         for _ in range(num_instances):
-            obj = cmds.instance(custom_mesh)
+            obj = cmds.instance(cloned_mesh)
             # Select a random face from the upward-facing list.
             face_id = random.choice(upward_faces)
             face_name = f"{surface}.f[{face_id}]"
@@ -207,10 +211,10 @@ class ScatterTools(object):
         # Parent the group of instances to the surface mesh.
         cmds.parent(group_meshes, surface)
 
-        # Clean up history for the custom mesh.
-        cmds.delete(ch=True)
+        # Clean up history for the cloned mesh.
+        cmds.delete(cloned_mesh, ch=True)
 
-        # Hide the original custom mesh
+        # Optionally hide the original custom mesh to avoid clutter.
         cmds.hide(custom_mesh)
 
         return group_meshes, custom_mesh
@@ -319,7 +323,34 @@ class ScatterTools(object):
 
         print(f"Green material '{material_name}' created and assigned to extruded faces.")
 
+def delete_objects_ending_with(suffix):
+    # List all objects in the scene
+    all_objects = cmds.ls(dag=True, long=True)
+    
+    # Filter objects that end with the specified suffix
+    objects_to_delete = [obj for obj in all_objects if obj.endswith(suffix)]
+    
+    # Delete the filtered objects
+    if objects_to_delete:
+        cmds.delete(objects_to_delete)
+        print(f"Deleted objects: {', '.join(objects_to_delete)}")
+    else:
+        print("No objects found with the specified suffix.")
+def delete_invisible_meshes():
+    # List all mesh shapes in the scene
+    all_meshes = cmds.ls(type='mesh', long=True)
 
+    # Iterate over all mesh shapes
+    for mesh in all_meshes:
+        # Get the transform node associated with the mesh
+        transform = cmds.listRelatives(mesh, parent=True, fullPath=True)
+        if transform:
+            transform = transform[0]
+            # Check if the transform node is visible
+            if not cmds.getAttr(f"{transform}.visibility"):
+                # Delete the mesh object
+                cmds.delete(transform)
+                print(f"Deleted invisible mesh: {transform}")
 def move_pivot_to_bottom_center(mesh_name):
     # Ensure the object exists
     if not cmds.objExists(mesh_name):
@@ -656,8 +687,8 @@ def export_to_unreal():
         # Define the source path of the FBX file
         source_path = os.path.join(current_project_path, fbx_file)
         
-        # Use the export prefix
-        destination_filename = os.path.splitext(fbx_file)[0] + ".fbx"
+        # Use the export
+        destination_filename =  os.path.splitext(fbx_file)[0] + ".fbx"
         destination_path = os.path.join(unreal_export_path, destination_filename)
 
         # Query UI elements for current FBX file
@@ -721,6 +752,9 @@ def export_to_unreal():
 
                 # Ensure that all changes are saved before exporting
                 cmds.file(rename=destination_path)
+                # Call the function to delete objects ending with "clone"
+                delete_objects_ending_with("clone")
+                delete_invisible_meshes()
                 cmds.file(save=True, type='FBX export')
                 
                 print(f"Exported {fbx_file} to {destination_path}")
