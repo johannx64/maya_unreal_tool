@@ -210,7 +210,10 @@ class ScatterTools(object):
         # Clean up history for the custom mesh.
         cmds.delete(ch=True)
 
+        # Hide the original custom mesh
+        cmds.hide(custom_mesh)
 
+        return group_meshes, custom_mesh
     def create_and_assign_material(self, selection):
         """Create a moss material and assign it to the selected faces."""
         shader = cmds.shadingNode('lambert', asShader=True)
@@ -630,10 +633,10 @@ def find_similar_mesh(asset_name):
                 return transform_name  # Return the transform node name
     
     return None  # No similar mesh found
+
 def export_to_unreal():
     """Export each mesh individually to the specified Unreal export path."""
-    global export_ui_elements, scatter_num_instances, scatter_scale_min, scatter_scale_max, scatter_size, moss_min_tolerance, moss_max_tolerance
-
+    global export_ui_elements, scatter_num_instances, scatter_scale_min, scatter_scale_max, scatter_size, moss_min_tolerance, moss_max_tolerance, moss_extrusion_scale
 
     if not unreal_export_path:
         cmds.warning("Please select an export folder for Unreal first.")
@@ -643,16 +646,19 @@ def export_to_unreal():
     if not os.path.exists(unreal_export_path):
         os.makedirs(unreal_export_path)
 
+    scatter_tools = ScatterTools()
+    original_meshes_to_delete = []
+
     # Loop through each FBX file and export it
     for fbx_file, elements in export_ui_elements.items():
         export_items = []  # Collect items to print later
-        scatter_tools = ScatterTools()  # Assuming ScatterTools class is defined and initialized somewhere
         
         # Define the source path of the FBX file
         source_path = os.path.join(current_project_path, fbx_file)
-        # Define the destination path in the Unreal export directory
-        destination_path = os.path.join(unreal_export_path, fbx_file)
-
+        
+        # Use the export prefix
+        destination_filename = os.path.splitext(fbx_file)[0] + ".fbx"
+        destination_path = os.path.join(unreal_export_path, destination_filename)
 
         # Query UI elements for current FBX file
         moss_value = cmds.checkBox(elements['moss'], query=True, value=True)
@@ -685,19 +691,14 @@ def export_to_unreal():
                     print(f"Processing mesh: {mesh}")
                     # Apply moss effect if moss is checked
                     if moss_value:
-                        try:                
-                            scatter_tools.add_moss([mesh], 
-                                                    min_tolerance=moss_min_tolerance, 
-                                                    max_tolerance=moss_max_tolerance, 
-                                                    extrusion_scale=moss_extrusion_scale,
-                                                    material_name=MOSS_MATERIAL_NAME)
+                        try:
+                            scatter_tools.add_moss([mesh], min_tolerance=moss_min_tolerance, max_tolerance=moss_max_tolerance, extrusion_scale=moss_extrusion_scale, material_name=MOSS_MATERIAL_NAME)
                             print(f"Applied moss effect to {mesh} with tolerance range {moss_min_tolerance} - {moss_max_tolerance} and extrusion scale {moss_extrusion_scale}")
                         except Exception as e:
                             print(f"Failed to apply moss effect to {mesh}: {str(e)}")
 
                     # Scatter objects if plants are checked
                     if plants_value:
-                        n = 0
                         try:
                             for asset in selected_assets:
                                 # Construct the full path for each scatter asset
@@ -705,19 +706,15 @@ def export_to_unreal():
                                 if os.path.exists(asset_path):
                                     # Import the FBX file
                                     cmds.file(asset_path, i=True, type="FBX", mergeNamespacesOnClash=False, namespace=":")
-                                    # Get the name of the first mesh in the scene
-                                    mesh_list = cmds.ls(type="mesh")
-                                    print("###############")
-                                    print(surface_mesh[:-5])
                                     scatter_asset_name = find_similar_mesh(asset)
-                                    scatter_tools.scatter_mesh_on_surface(
+                                    group_meshes, original_mesh = scatter_tools.scatter_mesh_on_surface(
                                         surface=surface_mesh[:-5],
                                         custom_mesh=scatter_asset_name,
                                         num_instances=scatter_num_instances,
                                         scale_variation=(scatter_scale_min, scatter_scale_max),
                                         size=scatter_size
                                     )
-                                    n=n+1
+                                    original_meshes_to_delete.append(original_mesh)
                             print(f"Scattered objects on {mesh}")
                         except Exception as e:
                             print(f"Failed to scatter objects on {mesh}: {str(e)}")
@@ -733,12 +730,15 @@ def export_to_unreal():
         else:
             print(f"Source file {source_path} does not exist.")
 
+    # Clean up original meshes used for scattering
+    for mesh in original_meshes_to_delete:
+        if cmds.objExists(mesh):
+            cmds.delete(mesh)
+
     # Print the collected export items
     print("Collected Export Items:")
     for item in export_items:
         print(item)
-
-
 
     cmds.confirmDialog(title="Export Complete", message="Files exported to Unreal successfully!", button=["OK"])
 
