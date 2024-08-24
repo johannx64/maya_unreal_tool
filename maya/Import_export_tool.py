@@ -111,10 +111,11 @@ class ImportTools(object):
                 transform_ls = cmds.ls(list_nodes, type='transform')
                 
                 # If you have a custom shader assignment logic, you can use it here
+                """
                 for i, sel in enumerate(transform_ls):
                     print(f"Assigning shader to: {sel}")
                     assign_shaders(transform_ls, len(transform_ls), i)
-
+                """
             # Return list of imported meshes to Window class
             BatchProcessorWindow._mesh_imports = fbx_files_path
             BatchProcessorWindow._import_path_executed = cmds.textField(self._import_path, q=True, tx=True)
