@@ -121,7 +121,7 @@ class ImportTools(object):
             print("No meshes to import, analyze folder structure first!")
 
 class ScatterTools(object):
-    def scatter_mesh_on_surface(surface, custom_mesh, num_instances=20, scale_variation=(1, 1), size=1.0):
+    def scatter_mesh_on_surface(self, surface, custom_mesh, num_instances=20, scale_variation=(1, 1), size=1.0):
         """
         Scatter instances of a custom mesh on the surface mesh.
 
@@ -278,6 +278,53 @@ class ScatterTools(object):
                 cmds.select(cl=True)
                 print(f"Completed processing for mesh: {name}")
 
+def move_pivot_to_bottom_center(mesh_name):
+    # Ensure the object exists
+    if not cmds.objExists(mesh_name):
+        print(f"Object '{mesh_name}' does not exist.")
+        return
+    
+    # Select the mesh
+    cmds.select(mesh_name)
+    
+    # Get the bounding box of the mesh
+    bbox = cmds.exactWorldBoundingBox(mesh_name)
+    print(f"Original bounding box: {bbox}")
+    
+    # Calculate the bottom center position
+    min_x, min_y, min_z, max_x, max_y, max_z = bbox
+    center_x = (min_x + max_x) / 2
+    center_y = min_y
+    center_z = (min_z + max_z) / 2
+    print(f"Calculated bottom center: ({center_x}, {center_y}, {center_z})")
+    
+    # Move the pivot to the bottom center
+    cmds.move(center_x, center_y, center_z, mesh_name + ".scalePivot", relative=True, a=True)
+    cmds.move(center_x, center_y, center_z, mesh_name + ".rotatePivot", relative=True, a=True)
+    
+    # Verify the new pivot position
+    new_scale_pivot = cmds.xform(mesh_name + ".scalePivot", query=True, ws=True, rp=True)
+    new_rotate_pivot = cmds.xform(mesh_name + ".rotatePivot", query=True, ws=True, rp=True)
+    print(f"New scale pivot position: {new_scale_pivot}")
+    print(f"New rotate pivot position: {new_rotate_pivot}")
+
+# Function to get the name of the first mesh in the scene
+def find_mesh_by_name_in_scene(fbx_filename):
+    # Extract the base name without extension and adjust it dynamically
+    base_name = os.path.splitext(fbx_filename)[0]
+    
+    # List all mesh shapes in the scene
+    all_meshes = cmds.ls(type='mesh')
+    
+    # Check if the base name is contained in the mesh names
+    for mesh in all_meshes:
+        transform_node = cmds.listRelatives(mesh, parent=True)
+        if transform_node:
+            transform_name = transform_node[0]
+            if base_name in transform_name:
+                return transform_name
+    
+    return None 
 # Create an instance of ImportTools
 import_tools = ImportTools()
 # create an instance of ScatterTools
@@ -287,7 +334,7 @@ def remove_extension(filename):
     # Split the filename and its extension
     base, ext = os.path.splitext(filename)
     return base
-    
+
 def browse_folder():
     """Browse for a folder containing .fbx files."""
     global fbx_import_path
@@ -493,6 +540,7 @@ def export_to_unreal():
                 
                 # Get the mesh names from the scene
                 mesh_list = cmds.ls(type="mesh")
+                surface_mesh = mesh_list[0]
                 print(f"Mesh names extracted from FBX files: {mesh_list}")
 
                 for mesh in mesh_list:
@@ -510,20 +558,26 @@ def export_to_unreal():
 
                     # Scatter objects if plants are checked
                     if plants_value:
+                        n = 1
                         try:
                             for asset in selected_assets:
                                 # Construct the full path for each scatter asset
                                 asset_path = os.path.join(scatter_assets_path, asset)
                                 if os.path.exists(asset_path):
+                                    # Import the FBX file
                                     cmds.file(asset_path, i=True, type="FBX", mergeNamespacesOnClash=False, namespace=":")
-                                    #scatter_tools.scatter_mesh_on_surface(fbx_file, asset_path)
-                                    scatter_mesh_on_surface(
-                                        surface=fbx_file,
-                                        custom_mesh="S_Gilled_Mushroom_tfstfjhpa_lod5",
+                                    # Get the name of the first mesh in the scene
+                                    mesh_list = cmds.ls(type="mesh")
+                                    print("###############")
+                                    print(surface_mesh[:-5])
+                                    scatter_tools.scatter_mesh_on_surface(
+                                        surface= surface_mesh[:-5],
+                                        custom_mesh= mesh_list[n],
                                         num_instances=20,
                                         scale_variation=(0.5, 2.0),
-                                        size=1.0
+                                        size=0.5
                                     )
+                                    n=n+1
                             print(f"Scattered objects on {mesh}")
                         except Exception as e:
                             print(f"Failed to scatter objects on {mesh}: {str(e)}")
