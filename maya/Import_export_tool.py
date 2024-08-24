@@ -4,7 +4,7 @@ import sys
 import random
 
 # Constants
-WINDOW_WIDTH = 500
+WINDOW_WIDTH = 600
 GRID_HEIGHT = 20
 
 # Global variables to hold the list of FBX files and available assets
@@ -13,6 +13,13 @@ available_assets = []
 # Dictionary to store UI element references
 export_ui_elements = {}
 
+# global variables section
+scatter_num_instances = 20
+scatter_scale_min = 0.5
+scatter_scale_max = 2.0
+scatter_size = 0.5
+moss_min_tolerance = 10
+moss_max_tolerance = 60
 
 # Global variable to store the Unreal export path
 unreal_export_path = r"C:\Users\Acer\Documents\maya_unreal\maya_test\export_to_unreal"
@@ -417,7 +424,7 @@ def remove_from_export_list(fbx):
 
 def create_import_ui(root):
     """Create the import UI section."""
-    frame = cmds.frameLayout(p=root, label="FBX Importer", width=WINDOW_WIDTH)
+    frame = cmds.frameLayout(p=root, label="FBX Importer", width=WINDOW_WIDTH, collapsable=True, collapse=False)
     column = cmds.columnLayout(p=frame, adjustableColumn=True)
     cmds.textField('fbxImportPath', text=fbx_import_path, editable=False, parent=column)
     cmds.button(label="Browse Folder", parent=column, command=lambda _: browse_folder())
@@ -430,7 +437,7 @@ def create_import_ui(root):
 
 def create_assets_ui(root):
     """Create the assets selection UI section."""
-    frame = cmds.frameLayout(p=root, label="Scatter/Aging Assets", width=WINDOW_WIDTH)
+    frame = cmds.frameLayout(p=root, label="Scatter/Aging Assets", width=WINDOW_WIDTH, collapsable=True, collapse=False)
     column = cmds.columnLayout(p=frame, adjustableColumn=True)
     cmds.textField('scatterAssetsPath', text=scatter_assets_path, editable=False, parent=column)
     cmds.button(label="Select Assets Folder", parent=column, command=lambda _: browse_assets_folder())
@@ -444,25 +451,43 @@ def create_export_ui():
     if cmds.scrollLayout('exportScroll', exists=True):
         cmds.deleteUI('exportScroll', layout=True)
 
-    export_scroll = cmds.scrollLayout('exportScroll', parent='mainLayout', width=WINDOW_WIDTH, height=200)
+    export_scroll = cmds.scrollLayout('exportScroll', parent='mainLayout', width=WINDOW_WIDTH, height=400)  # Increased height
     export_column = cmds.columnLayout(p=export_scroll, adjustableColumn=True)
     
+    # Add controls for scatter_mesh_on_surface
+    cmds.frameLayout(label="Scatter Controls", collapsable=True, collapse=False, parent=export_column)
+    cmds.columnLayout(adjustableColumn=False)
+    cmds.intSliderGrp('scatterNumInstances', label='Number of Instances', field=True, minValue=1, maxValue=100, value=scatter_num_instances)
+    cmds.floatSliderGrp('scatterScaleMin', label='Min Scale', field=True, minValue=0.1, maxValue=5.0, value=scatter_scale_min)
+    cmds.floatSliderGrp('scatterScaleMax', label='Max Scale', field=True, minValue=0.1, maxValue=5.0, value=scatter_scale_max)
+    cmds.floatSliderGrp('scatterSize', label='Size', field=True, minValue=0.1, maxValue=5.0, value=scatter_size)
+    
+    # Add controls for add_moss
+    cmds.frameLayout(label="Moss Controls", collapsable=True, collapse=False, parent=export_column)
+    cmds.columnLayout(adjustableColumn=False)
+    cmds.floatSliderGrp('mossMinTolerance', label='Min Tolerance', field=True, minValue=0, maxValue=90, value=moss_min_tolerance)
+    cmds.floatSliderGrp('mossMaxTolerance', label='Max Tolerance', field=True, minValue=0, maxValue=90, value=moss_max_tolerance)
+    
+    # Export Items List
+    cmds.frameLayout(label="Export Items", collapsable=True, collapse=False, parent=export_column)
+    items_column = cmds.columnLayout(adjustableColumn=True)
+    
     # Column headers
-    cmds.rowLayout(numberOfColumns=6, adjustableColumn=3, columnWidth6=[50, 50, 250, 200, 100, 100], parent=export_column)
+    cmds.rowLayout(numberOfColumns=6, adjustableColumn=3, columnWidth6=[50, 50, 200, 300, 100, 120], parent=items_column)
     cmds.text(label="Moss", align='center')
     cmds.text(label="Plants", align='center')
-    cmds.text(label="Name", align='center')
-    cmds.text(label="Available Assets", align='center')
+    cmds.text(label="FBX Name", align='center')
+    cmds.text(label="Scatter Assets", align='center')
     cmds.text(label="Select All", align='center')
     cmds.text(label="Remove", align='center')
 
     for fbx_file in fbx_files:
-        row = cmds.rowLayout(numberOfColumns=6, adjustableColumn=3, columnWidth6=[50, 50, 250, 200, 100, 100], parent=export_column)
+        row = cmds.rowLayout(numberOfColumns=6, adjustableColumn=3, columnWidth6=[50, 50, 200, 300, 100, 120], parent=items_column)
         
         moss_checkbox = cmds.checkBox(label="", value=True, parent=row)
         plants_checkbox = cmds.checkBox(label="", value=True, parent=row)
         name_label = cmds.text(label=fbx_file, align='left', parent=row)
-        asset_list = cmds.textScrollList(allowMultiSelection=True, height=60, append=available_assets, parent=row)
+        asset_list = cmds.textScrollList(allowMultiSelection=True, height=90, append=available_assets, parent=row)
 
         # Select all items by default
         select_all_items(asset_list)
@@ -496,7 +521,8 @@ def browse_unreal_folder():
 
 def export_to_unreal():
     """Export each mesh individually to the specified Unreal export path."""
-    global export_ui_elements  # Ensure that we reference the global dictionary
+    global export_ui_elements, scatter_num_instances, scatter_scale_min, scatter_scale_max, scatter_size, moss_min_tolerance, moss_max_tolerance
+
 
     if not unreal_export_path:
         cmds.warning("Please select an export folder for Unreal first.")
@@ -506,15 +532,23 @@ def export_to_unreal():
     if not os.path.exists(unreal_export_path):
         os.makedirs(unreal_export_path)
 
+    # Get export prefix
+    export_prefix = cmds.textField('exportPrefix', query=True, text=True)
+
     export_items = []  # Collect items to print later
     scatter_tools = ScatterTools()  # Assuming ScatterTools class is defined and initialized somewhere
 
     # Loop through each FBX file and export it
     for fbx_file, elements in export_ui_elements.items():
+        
         # Define the source path of the FBX file
         source_path = os.path.join(current_project_path, fbx_file)
         # Define the destination path in the Unreal export directory
-        destination_path = os.path.join(unreal_export_path, fbx_file)
+        #destination_path = os.path.join(unreal_export_path, fbx_file)
+
+        # Use the export prefix
+        destination_filename = export_prefix + os.path.splitext(fbx_file)[0] + ".fbx"
+        destination_path = os.path.join(unreal_export_path, destination_filename)
 
         # Query UI elements for current FBX file
         moss_value = cmds.checkBox(elements['moss'], query=True, value=True)
@@ -547,12 +581,11 @@ def export_to_unreal():
                     print(f"Processing mesh: {mesh}")
 
                     # Apply moss effect if moss is checked
+                    # Apply moss effect if moss is checked
                     if moss_value:
                         try:
-                            tolerance = random.uniform(10, 60)
-                            scatter_tools.add_moss([mesh], min_tolerance=10, max_tolerance=60)
-                            print(f"Using tolerance: {tolerance}")
-                            print(f"Completed processing for mesh: {mesh}")
+                            scatter_tools.add_moss([mesh], min_tolerance=moss_min_tolerance, max_tolerance=moss_max_tolerance)
+                            print(f"Applied moss effect to {mesh} with tolerance range {moss_min_tolerance} - {moss_max_tolerance}")
                         except Exception as e:
                             print(f"Failed to apply moss effect to {mesh}: {str(e)}")
 
@@ -571,11 +604,11 @@ def export_to_unreal():
                                     print("###############")
                                     print(surface_mesh[:-5])
                                     scatter_tools.scatter_mesh_on_surface(
-                                        surface= surface_mesh[:-5],
-                                        custom_mesh= mesh_list[n],
-                                        num_instances=20,
-                                        scale_variation=(0.5, 2.0),
-                                        size=0.5
+                                        surface=surface_mesh[:-5],
+                                        custom_mesh=mesh_list[n],
+                                        num_instances=scatter_num_instances,
+                                        scale_variation=(scatter_scale_min, scatter_scale_max),
+                                        size=scatter_size
                                     )
                                     n=n+1
                             print(f"Scattered objects on {mesh}")
@@ -604,11 +637,31 @@ def export_to_unreal():
 
 def create_unreal_export_ui(root):
     """Create the Unreal export UI section."""
-    frame = cmds.frameLayout(p=root, label="Export to Unreal", width=WINDOW_WIDTH)
+    frame = cmds.frameLayout(p=root, label="Export to Unreal", width=WINDOW_WIDTH, collapsable=True, collapse=False)
     column = cmds.columnLayout(p=frame, adjustableColumn=True)
-    cmds.textField('unrealExportPath', text=unreal_export_path, editable=False, parent=column)
-    cmds.button(label="Browse Folder", parent=column, command=lambda _: browse_unreal_folder())
-    cmds.button(label="Export to Unreal!", parent=column, command=lambda _: export_to_unreal())
+
+    # Export path selection
+    cmds.rowLayout(numberOfColumns=3, adjustableColumn=2, columnWidth3=(80, 300, 60),  parent=column)
+    cmds.text(label="Export Path:", width=80, align='right')
+    cmds.textField('unrealExportPath', text=unreal_export_path, editable=False, width=300)
+    cmds.button(label="Browse", command=lambda _: browse_unreal_folder(), width=60)
+    cmds.setParent('..')  # Go back to the column layout
+
+    # Add some space
+    cmds.separator(height=10, style='none')
+
+    # Export prefix
+    cmds.rowLayout(numberOfColumns=2, adjustableColumn=2, columnWidth2=(80, 300),  parent=column)
+    cmds.text(label="Export Prefix:", width=80, align='right')
+    cmds.textField('exportPrefix', text="SM_", width=300)
+    cmds.setParent('..')  # Go back to the column layout
+
+    # Add some space
+    cmds.separator(height=10, style='none')
+
+    # Export button
+    cmds.button(label="Export to Unreal!", parent=column, command=lambda _: export_to_unreal(), height=40, backgroundColor=[0.2, 0.6, 0.2])
+
     if unreal_export_path:
         cmds.textField('unrealExportPath', edit=True, text=unreal_export_path)
 
@@ -618,15 +671,26 @@ def create_ui():
         cmds.deleteUI("myWindow", window=True)
 
     window = cmds.window("myWindow", title="FBX Batch Import/Export", widthHeight=(WINDOW_WIDTH, 700), sizeable=True)
-    cmds.columnLayout('mainLayout', adjustableColumn=True)
+    
+    # Create a form layout as the main container
+    main_form = cmds.formLayout(numberOfDivisions=100)
+    
+    # Create a scroll layout that will contain all other UI elements
+    main_scroll = cmds.scrollLayout('mainScroll', horizontalScrollBarThickness=16, verticalScrollBarThickness=16)
+    
+    # Attach the scroll layout to the form
+    cmds.formLayout(main_form, edit=True, 
+                    attachForm=[(main_scroll, 'top', 0), (main_scroll, 'bottom', 0), 
+                                (main_scroll, 'left', 0), (main_scroll, 'right', 0)])
+    
+    # Create a column layout inside the scroll layout
+    main_column = cmds.columnLayout('mainLayout', adjustableColumn=True, parent=main_scroll)
     
     # Create Scatter/Aging Assets, Import, and Export sections
-    create_assets_ui('mainLayout')
-    create_import_ui('mainLayout')
+    create_assets_ui(main_column)
+    create_import_ui(main_column)
     create_export_ui()
-
-    # Add the new Unreal export section
-    create_unreal_export_ui('mainLayout')
+    create_unreal_export_ui(main_column)
 
     cmds.showWindow(window)
 
