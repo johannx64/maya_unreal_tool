@@ -569,6 +569,14 @@ def create_export_ui():
                 
         # "Remove" button for the row
         cmds.button(label="Remove", parent=row, command=lambda x, fbx=fbx_file: remove_from_export_list(fbx))
+def refresh_export_list():
+    """Refresh the export list UI."""
+    # Clear existing export UI elements
+    if cmds.frameLayout('exportFrame', exists=True):
+        cmds.deleteUI('exportFrame', layout=True)
+    
+    # Recreate the export UI
+    create_export_ui()
 
 def refresh_import_list():
     """Refresh the import list UI."""
